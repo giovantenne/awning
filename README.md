@@ -105,8 +105,8 @@ Those services open the following TCP ports on your host:
 | `8080` | LND | Rest API for LND with SSL  |
 | `8081` | RTL | RTL web interface with SSL|
 | `8082` | RTL | RTL web interface without SSL |
-| `8082` | BTCPay Server (optional)| BTCPay server web interface with SSL|
-| `8083` | BTCPay Server (optional)| BTCPay server web interface without SSL |
+| `8083` | BTCPay Server (optional)| BTCPay server web interface with SSL|
+| `8084` | BTCPay Server (optional)| BTCPay server web interface without SSL |
 
 
 
