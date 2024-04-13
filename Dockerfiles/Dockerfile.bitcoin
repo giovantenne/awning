@@ -1,0 +1,21 @@
+FROM debian:bookworm-slim
+ARG VERSION=26.0
+ARG BITCOIN_ARCH
+ARG UID
+ARG GID
+RUN apt-get update && apt-get install -y wget curl gpg && rm -rf /var/lib/apt/lists/*
+RUN wget https://bitcoincore.org/bin/bitcoin-core-$VERSION/bitcoin-$VERSION-$BITCOIN_ARCH-linux-gnu.tar.gz && \
+  wget https://bitcoincore.org/bin/bitcoin-core-$VERSION/SHA256SUMS && \
+  wget https://bitcoincore.org/bin/bitcoin-core-$VERSION/SHA256SUMS.asc
+RUN sha256sum --ignore-missing --check SHA256SUMS
+RUN curl -s "https://api.github.com/repositories/355107265/contents/builder-keys" | grep download_url | grep -oE "https://[a-zA-Z0-9./-]+" | while read url; do curl -s "$url" | gpg --import; done
+RUN gpg --verify SHA256SUMS.asc
+RUN tar -zxvf bitcoin-$VERSION-$BITCOIN_ARCH-linux-gnu.tar.gz
+RUN install -m 0755 -o root -g root -t /usr/local/bin bitcoin-$VERSION/bin/*
+RUN groupadd bitcoin -g$GID
+RUN adduser --disabled-password --uid $UID --gid $GID --home /data --gecos "" bitcoin
+EXPOSE 8332
+EXPOSE 8333
+USER bitcoin
+ENTRYPOINT ["bitcoind"]
+

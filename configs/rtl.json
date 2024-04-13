@@ -1,0 +1,32 @@
+{
+  "port": "8081",
+  "defaultNodeIndex": 1,
+  "dbDirectoryPath": "/data/rtldb",
+  "SSO": {
+    "rtlSSO": 0,
+    "rtlCookiePath": "",
+    "logoutRedirectLink": ""
+  },
+  "nodes": [
+    {
+      "index": 1,
+      "lnNode": "Node 1",
+      "lnImplementation": "LND",
+      "Authentication": {
+        "macaroonPath": "/data/.lnd/data/chain/bitcoin/mainnet",
+        "configPath": "/data/lnd.conf"
+      },
+      "Settings": {
+        "userPersona": "OPERATOR",
+        "themeMode": "DAY",
+        "themeColor": "PURPLE",
+        "logLevel": "INFO",
+        "lnServerUrl": "https://lnd:8080",
+        "fiatConversion": true,
+        "unannouncedChannels": false,
+        "currencyUnit": "EUR"
+      }
+    }
+  ],
+  "multiPassHashed": ""
+}

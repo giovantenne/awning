@@ -1,0 +1,22 @@
+FROM debian:bookworm-slim
+ARG VERSION=0.17.4
+ARG LND_ARCH
+ARG UID
+ARG GID
+RUN apt-get update && apt-get install -y wget curl gpg && rm -rf /var/lib/apt/lists/*
+RUN wget https://github.com/lightningnetwork/lnd/releases/download/v$VERSION-beta/lnd-linux-$LND_ARCH-v$VERSION-beta.tar.gz && \
+  wget https://github.com/lightningnetwork/lnd/releases/download/v$VERSION-beta/manifest-v$VERSION-beta.txt && \
+  wget https://github.com/lightningnetwork/lnd/releases/download/v$VERSION-beta/manifest-roasbeef-v$VERSION-beta.sig && \
+  wget https://github.com/lightningnetwork/lnd/releases/download/v$VERSION-beta/manifest-roasbeef-v$VERSION-beta.sig.ots
+RUN sha256sum --check manifest-v$VERSION-beta.txt --ignore-missing
+RUN curl https://raw.githubusercontent.com/lightningnetwork/lnd/master/scripts/keys/roasbeef.asc | gpg --import
+RUN gpg --verify manifest-roasbeef-v$VERSION-beta.sig manifest-v$VERSION-beta.txt
+RUN tar -xvf lnd-linux-$LND_ARCH-v$VERSION-beta.tar.gz
+RUN install -m 0755 -o root -g root -t /usr/local/bin lnd-linux-$LND_ARCH-v$VERSION-beta/*
+ADD entrypoints/lnd.sh /lnd.sh
+RUN chmod +x /lnd.sh
+RUN groupadd lnd -g$GID
+RUN adduser --disabled-password --uid $UID --gid $GID --home /data --gecos "" lnd
+USER lnd
+EXPOSE 8080
+ENTRYPOINT ["/lnd.sh"]

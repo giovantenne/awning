@@ -1,0 +1,185 @@
+services:
+  tor:
+    container_name: tor
+    user: "${UID}:${GID}"
+    build:
+      context: ./Dockerfiles/
+      dockerfile: Dockerfile.tor
+      args:
+        UID: ${UID}
+        GID: ${GID}
+    volumes:
+      - ./data/tor:/data/cookie
+      - ./configs/torrc:/etc/tor/torrc:ro
+    restart: unless-stopped
+
+  bitcoin:
+    container_name: bitcoin
+    user: "${UID}:${GID}"
+    depends_on: [tor]
+    build:
+      context: ./Dockerfiles/
+      dockerfile: Dockerfile.bitcoin
+      args:
+        BITCOIN_ARCH: ${BITCOIN_ARCH}
+        UID: ${UID}
+        GID: ${GID}
+    volumes:
+      - ./data/bitcoin:/data/.bitcoin
+      - ./data/tor:/data/cookie:ro
+      - ./configs/bitcoin.conf:/data/.bitcoin/bitcoin.conf:ro
+    restart: unless-stopped
+
+  electrs:
+    container_name: electrs
+    user: "${UID}:${GID}"
+    depends_on: [bitcoin]
+    build:
+      context: ./Dockerfiles/
+      dockerfile: Dockerfile.electrs
+      args:
+        UID: ${UID}
+        GID: ${GID}
+    volumes:
+      - ./configs/electrs.toml:/data/electrs.toml:ro
+      - ./data/electrs:/data
+      - ./data/bitcoin:/data/.bitcoin:ro
+    restart: unless-stopped
+
+  lnd:
+    container_name: lnd
+    user: "${UID}:${GID}"
+    depends_on: [bitcoin, tor]
+    build:
+      context: ./Dockerfiles/
+      dockerfile: Dockerfile.lnd
+      args:
+        LND_ARCH: ${LND_ARCH}
+        UID: ${UID}
+        GID: ${GID}
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data/lnd:/data/.lnd
+      - ./data/tor:/data/cookie:ro
+      - ./data/bitcoin:/data/.bitcoin:ro
+      - ./configs/lnd.conf:/data/.lnd/lnd.conf:ro
+    environment:
+      LND_PASSWORD: ${LND_PASSWORD}
+    restart: unless-stopped
+
+  scb:
+    container_name: scb
+    user: "${UID}:${GID}"
+    depends_on: [lnd]
+    build:
+      context: ./Dockerfiles/
+      dockerfile: Dockerfile.scb
+      args:
+        UID: ${UID}
+        GID: ${GID}
+    volumes:
+      - ./data/scb:/data
+      - ./data/lnd:/lnd:ro
+    environment:
+      SCB_REPO: ${SCB_REPO}
+    restart: unless-stopped
+
+  rtl:
+    container_name: rtl
+    user: "${UID}:${GID}"
+    depends_on: [lnd]
+    build:
+      context: ./Dockerfiles/
+      dockerfile: Dockerfile.rtl
+      args:
+        UID: ${UID}
+        GID: ${GID}
+    volumes:
+      - ./configs/rtl.json:/data/RTL/RTL-Config.json
+      - ./configs/lnd.conf:/data/lnd.conf:ro
+      - ./data/lnd:/data/.lnd:ro
+      - ./data/rtl:/data/rtldb
+    environment:
+      APP_PASSWORD: ${RTL_PASSWORD}
+    restart: unless-stopped
+
+  nginx:
+    container_name: nginx
+    depends_on: [rtl, electrs, lnd]
+    # depends_on: [rtl, electrs, lnd, btcpay]
+    build:
+      context: ./Dockerfiles/
+      dockerfile: Dockerfile.nginx
+    ports:
+      - "50002:50002" #electrs  RPC ssl
+      - "8081:8081"   #rtl      WEB ssl
+      - "8082:8082"   #rtl      WEB no ssl
+      # - "8083:8083"   #btcpay   WEB ssl
+      # - "8084:8084"   #btcpay   WEB no ssl
+    volumes:
+      - ./configs/nginx-reverse-proxy.conf:/etc/nginx/streams-enabled/nginx-reverse-proxy.conf:ro
+    restart: unless-stopped
+
+
+  # btcpay:
+  #   container_name: btcpay
+  #   image: btcpayserver/btcpayserver:1.13.0
+  #   user: "${UID}:${GID}"
+  #   depends_on: [nbx, postgres]
+  #   entrypoint: ["dotnet", "BTCPayServer.dll"]
+  #   volumes:
+  #     - ./data/btcpay:/data
+  #     - ./data/nbx:/data/.nbxplorer:ro
+  #     - ./data/lnd:/data/.lnd:ro
+  #   expose:
+  #     - "49392"
+  #   environment:
+  #     HOME: "/data"
+  #     BTCPAY_DATADIR: "/data"
+  #     BTCPAY_PLUGINDIR: "/data/plugins"
+  #     BTCPAY_DOCKERDEPLOYMENT: "false"
+  #     BTCPAY_POSTGRES: "User ID=postgres;Host=postgres;Port=5432;Database=btcpayservermainnet"
+  #     BTCPAY_NETWORK: "mainnet"
+  #     BTCPAY_BIND: 0.0.0.0:3003
+  #     BTCPAY_CHAINS: "btc"
+  #     BTCPAY_BTCEXPLORERURL: "http://nbx:32838"
+  #     BTCPAY_BTCLIGHTNING: "type=lnd-rest;server=https://lnd:8080/;macaroonfilepath=/data/.lnd/data/chain/bitcoin/mainnet/admin.macaroon;allowinsecure=true"
+  #     BTCPAY_SOCKSENDPOINT: tor:9050
+  #     BTCPAY_EXPLORERPOSTGRES: User ID=postgres;Host=postgres;Port=5432;Application Name=nbxplorer;MaxPoolSize=20;Database=nbxplorermainnet
+  #   restart: unless-stopped
+  # nbx:
+  #   container_name: nbx
+  #   user: "${UID}:${GID}"
+  #   image: nicolasdorier/nbxplorer:2.5.0@sha256:bbff2b6703ed240da263e6ba01deacf2c6520d371d6a0202e87a9e8c7f97b158
+  #   depends_on: [postgres, bitcoin]
+  #   volumes:
+  #     - ./data/nbx:/data
+  #     - ./data/bitcoin:/bitcoin:ro
+  #   environment:
+  #     NBXPLORER_DATADIR: "/data"
+  #     NBXPLORER_NETWORK: "mainnet"
+  #     NBXPLORER_BIND: 0.0.0.0:32838
+  #     NBXPLORER_CHAINS: "btc"
+  #     NBXPLORER_SIGNALFILEDIR: "/data"
+  #     NBXPLORER_BTCRPCURL: "http://bitcoin:8332"
+  #     NBXPLORER_BTCRPCCOOKIEFILE: "/bitcoin/.cookie"
+  #     NBXPLORER_BTCNODEENDPOINT: bitcoin:8333
+  #     NBXPLORER_POSTGRES: User ID=postgres;Host=postgres;Port=5432;Application Name=nbxplorer;MaxPoolSize=20;Database=nbxplorermainnet
+  #     NBXPLORER_AUTOMIGRATE: 1
+  #     NBXPLORER_NOMIGRATEEVTS: 1
+  #     NBXPLORER_BTCHASTXINDEX: 1
+  #   restart: unless-stopped
+  # postgres:
+  #   container_name: postgres
+  #   user: "${UID}:${GID}"
+  #   shm_size: 256mb
+  #   # https://github.com/btcpayserver/dockerfile-deps/tree/master/Postgres/13.13
+  #   image: btcpayserver/postgres:13.13
+  #   command: ["-c", "random_page_cost=1.0", "-c", "shared_preload_libraries=pg_stat_statements"]
+  #   environment:
+  #     POSTGRES_HOST_AUTH_METHOD: trust
+  #     PGDATA: /var/lib/postgresql/data/db-files/
+  #   volumes:
+  #     - ./data/postgres:/var/lib/postgresql/data
+  #   restart: unless-stopped

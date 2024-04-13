@@ -1,0 +1,10 @@
+FROM debian:bookworm-slim
+ARG UID
+ARG GID
+RUN apt-get update && apt-get install -y tor && rm -rf /var/lib/apt/lists/*
+EXPOSE 9050
+RUN groupadd tor -g$GID
+RUN adduser --disabled-password --uid $UID --gid $GID --home /data --gecos "" tor
+USER tor
+
+ENTRYPOINT ["tor"]
