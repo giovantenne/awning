@@ -1,0 +1,6 @@
+SOCKSPort 0.0.0.0:9050
+ControlPort 0.0.0.0:9051
+
+CookieAuthentication 1
+CookieAuthFileGroupReadable 1
+CookieAuthFile /data/cookie/control_auth_cookie

@@ -1,0 +1,21 @@
+FROM rust:1.63.0-slim-bullseye AS builder
+ARG VERSION=v0.10.4
+WORKDIR /build
+RUN apt-get update && apt-get install -y git clang cmake libsnappy-dev && rm -rf /var/lib/apt/lists/*
+RUN git clone --branch $VERSION https://github.com/romanz/electrs .
+# cargo under QEMU building for ARM can consumes 10s of GBs of RAM...
+# Solution: https://users.rust-lang.org/t/cargo-uses-too-much-memory-being-run-in-qemu/76531/2
+ENV CARGO_NET_GIT_FETCH_WITH_CLI true
+RUN cargo install --locked --path .
+
+FROM debian:bookworm-slim
+ARG UID
+ARG GID
+RUN groupadd electrs -g$GID
+RUN adduser --disabled-password --uid $UID --gid $GID --home /data --gecos "" electrs
+USER electrs
+WORKDIR /data
+COPY --from=builder /usr/local/cargo/bin/electrs /bin/electrs
+EXPOSE 50001
+EXPOSE 4224
+ENTRYPOINT ["electrs"]
