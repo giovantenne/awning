@@ -162,7 +162,7 @@ Replace `localhost` with the IP of your node if you are runnin **Awning** on a d
 - Download the Zeus app for your mobile phone. 
 - Open Zeus and tap on “GET STARTED”
 - Tap on “Connect a node” and then tap on the “+” at the top right to add your node
-- Enter a Nickname for your node (e.g., “RaspiBolt”)
+- Enter a Nickname for your node (e.g., AwningNode)
 - Click on “SCAN LNDCONNECT CONFIG” and, if prompted, allow Zeus to use the camera
 - Scan the QR code generated with the following command. It will be a big QR code, so maximize your terminal window and use CTRL+- to shrink the code further to fit the screen
 ```
