@@ -3,4 +3,8 @@ ControlPort 0.0.0.0:9051
 
 CookieAuthentication 1
 CookieAuthFileGroupReadable 1
-CookieAuthFile /data/cookie/control_auth_cookie
+CookieAuthFile /var/lib/tor/control_auth_cookie
+
+HiddenServiceDir /var/lib/tor/hidden_service_lnd_rest/
+HiddenServiceVersion 3
+HiddenServicePort 8080 lnd:8080
