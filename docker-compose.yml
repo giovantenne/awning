@@ -9,7 +9,7 @@ services:
         UID: ${UID}
         GID: ${GID}
     volumes:
-      - ./data/tor:/data/cookie
+      - ./data/tor:/var/lib/tor/
       - ./configs/torrc:/etc/tor/torrc:ro
     restart: unless-stopped
 
@@ -61,7 +61,7 @@ services:
       - "8080:8080"
     volumes:
       - ./data/lnd:/data/.lnd
-      - ./data/tor:/data/cookie:ro
+      - ./data/tor:/var/lib/tor:ro
       - ./data/bitcoin:/data/.bitcoin:ro
       - ./configs/lnd.conf:/data/.lnd/lnd.conf:ro
     environment:
