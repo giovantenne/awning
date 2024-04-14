@@ -89,7 +89,7 @@ This will spin-up the following services/containers in background:
 
 The first time it will take some time to build all the images from scratch (especially compiling the Electrs binary can take up to one hour).
 
-After all the images are built, “bitcoind” should start, begin to sync and validate the Bitcoin blockchain. If you already downloaded the blockchain somewhere else, you can just copy the data to the `./data/bitcoin` directory.
+After all the images are built, “bitcoind” should start, begin to sync and validate the Bitcoin blockchain. If you already downloaded the blockchain somewhere else, you can just copy the data to the `./data/bitcoin` directory before the `docker-compose up -d` command.
 
 Check the status of the bitcoin daemon that was started with the following command. Exit with Ctrl-C
 
@@ -157,6 +157,22 @@ If you are running **Awning** on your PC you can access the web interface throug
 - [http://localhost:8082](http://localhost:8082)
 
 Replace `localhost` with the IP of your node if you are runnin **Awning** on a different PC.
+
+# Connect Zeus to your node via TOR
+- Download the Zeus app for your mobile phone. 
+- Open Zeus and tap on “GET STARTED”
+- Tap on “Connect a node” and then tap on the “+” at the top right to add your node
+- Enter a Nickname for your node (e.g., “RaspiBolt”)
+- Click on “SCAN LNDCONNECT CONFIG” and, if prompted, allow Zeus to use the camera
+- Scan the QR code generated with the following command 
+```
+$ URI=`sudo docker exec tor cat /var/lib/tor/hidden_service_lnd_rest/hostname` && sudo docker exec lnd lndconnect --host $URI --port 8080
+```
+- Click on “SAVE NODE CONFIG”. Zeus is now connecting to your node, and it might take a while the first time.
+
+
+
+
 
 # Useful comands
 | Command | Description |
