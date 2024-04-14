@@ -158,16 +158,17 @@ If you are running **Awning** on your PC you can access the web interface throug
 
 Replace `localhost` with the IP of your node if you are runnin **Awning** on a different PC.
 
-# Connect Zeus to your node via TOR
+# Connect Zeus to your node (via TOR)
 - Download the Zeus app for your mobile phone. 
 - Open Zeus and tap on “GET STARTED”
 - Tap on “Connect a node” and then tap on the “+” at the top right to add your node
 - Enter a Nickname for your node (e.g., “RaspiBolt”)
 - Click on “SCAN LNDCONNECT CONFIG” and, if prompted, allow Zeus to use the camera
-- Scan the QR code generated with the following command 
+- Scan the QR code generated with the following command. It will be a big QR code, so maximize your terminal window and use CTRL+- to shrink the code further to fit the screen
 ```
-$ URI=`sudo docker exec tor cat /var/lib/tor/hidden_service_lnd_rest/hostname` && sudo docker exec lnd lndconnect --host $URI --port 8080
+$ URI=`docker exec tor cat /var/lib/tor/hidden_service_lnd_rest/hostname` && docker exec lnd lndconnect --host $URI --port 8080
 ```
+
 - Click on “SAVE NODE CONFIG”. Zeus is now connecting to your node, and it might take a while the first time.
 
 
