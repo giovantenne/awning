@@ -78,6 +78,7 @@ run_remote_backup_on_change () {
 run () {
   while true; do
 
+    if [ -f $SCB_SOURCE_FILE ]; then
       inotifywait $SCB_SOURCE_FILE
       echo "channel.backup has been changed!"
 
@@ -93,6 +94,9 @@ run () {
         echo "Remote backup is enabled"
         run_remote_backup_on_change "$REMOTE_BACKUP_FILE"
       fi
+    else
+      sleep 5
+    fi
 
   done
 }
