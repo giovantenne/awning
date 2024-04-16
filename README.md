@@ -237,7 +237,7 @@ $ URI=`docker exec tor cat /var/lib/tor/hidden_service_lnd_rest/hostname` && doc
 
 
 <a name="7"></a>
-# BTCPAY Server (optional)
+# BTCPay Server (optional)
 
 You can easily run your own self-hosted instance of [BTCPay Server](https://btcpayserver.org/) with **Awning** with just a few slight modification to a couple of files provided with this reposiroty:
 
