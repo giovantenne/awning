@@ -59,7 +59,11 @@ The Static Channels Backup (SCB) is a feature of LND that allows for the on-chai
 <a name="3"></a>
 ## Edit and understand the .env file
 
-The `.env` file contains some **Awning** setup parameters that you can/need to customize:
+The `.env` file contains some **Awning** setup parameters that you can/need to customize. Just make a copy of the sample file and edit it.
+```
+  $ cp .env.sample .env
+```
+
 | Parameter | Description |
 | --- | --- |
 | `BITCOIN_ARCH` | Here you need to choose your computer CPU architecture. Write `aarch64` for ARM (Raspberry Pi, etc) or `x86_64` for Intel or AMD. |
