@@ -1,10 +1,10 @@
-# A dockerized Bitcoin + LND + BTCPay  node 
+# A dockerized Bitcoin + LND + BTCPay  node
 
 
-Something like [Umbrel](https://umbrel.com) but lighter and portable. 
+Something like [Umbrel](https://umbrel.com) but lighter and portable.
 Something like [RaspiBolt](https://raspibolt.org/) but easier and automated. Bitcoin/Lightning-Network oriented with no frills.
 
-**Awning** doesn't install anything on your PC, making it lightweight, customizable and portable. 
+**Awning** doesn't install anything on your PC, making it lightweight, customizable and portable.
 It is a plain/vanilla Docker setup. **No script is ever run in your host.**
 
 ### Run your BTC/LN node in 6 steps:
@@ -22,7 +22,7 @@ You can also [add your BTCPay Server](#7) eventually.
 - git
 - docker
 - docker-compose (or [`docker compose plugin`](https://docs.docker.com/compose/install/linux/))
-  
+
 ```sh
 $ sudo apt-get install -y docker.io docker-compose git
 ```
@@ -43,7 +43,7 @@ Clone or download this repository and enter the project directory.
 ## LND channel backups preparation
 The Static Channels Backup (SCB) is a feature of LND that allows for the on-chain recovery of lightning channel balances in the case of a bricked node. Despite its name, it does not allow the recovery of your LN channels but increases the chance that you'll recover all (or most) of your off-chain (local) balances.
 
-**Awning** will automatically upload a copy of your `channel.backup` every time it changes on a Github repository you own, so you will need to create one and provide upload credential (see [here](#5))
+**Awning** will automatically upload a copy of your `channel.backup` every time it changes on a Github repository you own, so you will need to create one and provide upload credential [later](#5).
 
 <a name="2"></a>
 #### Create a GitHub repository
@@ -103,20 +103,20 @@ Check the status of the bitcoin daemon that was started with the following comma
 
 Those services open the following TCP ports on your host:
 
-| Parameter | Service | Description | 
-| --- | --- | --- |
-| `50002` | Electrs | Electrs with SSL  |
-| `8080` | LND | Rest API for LND with SSL  |
-| `8081` | RTL | RTL web interface with SSL|
-| `8082` | RTL | RTL web interface without SSL |
-| `8083` | BTCPay Server (optional)| BTCPay server web interface with SSL|
-| `8084` | BTCPay Server (optional)| BTCPay server web interface without SSL |
+| Parameter | Service | SSL |  Description |
+| --- | --- | --- | --- |
+| `50002` | Electrs | :white_check_mark: | Electrs  |
+| `8080` | LND | :white_check_mark: | Rest API for LND  |
+| `8081` | RTL | :white_check_mark: | RTL web interface|
+| `8082` | RTL | :white_large_square: | RTL web interface  |
+| `8083` | BTCPay Server (optional)| :white_check_mark: | BTCPay server web interface|
+| `8084` | BTCPay Server (optional)| :white_large_square: | BTCPay server web interface |
 
 
 
 # Finish the setup
 
-Once you first start the containers there is still a couple of steps to complete:
+Once you first start the containers there are still a couple of steps to complete:
 
 <a name="5"></a>
 ### Authorize SCB to be uploaded on Github
@@ -136,17 +136,17 @@ Run this command:
 <a name="6"></a>
 ### Create or restore the LND wallet
 
-If you are migrating from **Umbrel** or from an existing LND node just copy your data to the `./data/lnd` directory and skip the rest of this step, otherwise run this command:
+If you are migrating from **Umbrel** or from an existing LND node just copy your data to the `./data/lnd` directory before the `docker-compose up -d` command and skip the rest of this step, otherwise run this command:
 
   ```sh
   $ docker exec -it lnd lncli create
   ```
 
-Enter your password as wallet password (it must be exactly the same you stored in `.env` as [LND_PASSWORD](#3)). 
+Enter your password as wallet password (it must be exactly the same you stored in `.env` as [LND_PASSWORD](#3)).
 
 To create a a new wallet, select `n` when asked if you have an existing cipher seed. Just press enter if asked about an additional seed passphrase, unless you know what you’re doing. A new cipher seed consisting of 24 words is created.
 
-These 24 words is all that you need to restore the Bitcoin on-chain wallet. The current state of your channels, however, cannot be recreated from this seed. 
+These 24 words is all that you need to restore the Bitcoin on-chain wallet. The current state of your channels, however, cannot be recreated from this seed.
 
 🚨 This information must be kept secret at all times.
 
@@ -163,7 +163,7 @@ If you are running **Awning** on your PC you can access the web interface throug
 Replace `localhost` with the IP of your node if you are runnin **Awning** on a different PC.
 
 # Connect Zeus to your node (via TOR)
-- Download the Zeus app for your mobile phone. 
+- Download the Zeus app for your mobile phone.
 - Open Zeus and tap on “GET STARTED”
 - Tap on “Connect a node” and then tap on the “+” at the top right to add your node
 - Enter a Nickname for your node (e.g., AwningNode)
@@ -243,7 +243,7 @@ $ URI=`docker exec tor cat /var/lib/tor/hidden_service_lnd_rest/hostname` && doc
 <a name="7"></a>
 # BTCPay Server (optional)
 
-You can easily run your own self-hosted instance of [BTCPay Server](https://btcpayserver.org/) with **Awning** with just a few slight modification to a couple of files provided with this reposiroty:
+You can easily run your own self-hosted instance of [BTCPay Server](https://btcpayserver.org/) with **Awning** with just a few slight modification to a couple of files provided with this repository:
 
 | File | Modification |
 | --- | --- |
