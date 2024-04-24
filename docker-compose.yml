@@ -22,6 +22,7 @@ services:
       dockerfile: Dockerfile.bitcoin
       args:
         BITCOIN_ARCH: ${BITCOIN_ARCH}
+        BITCOIN_CORE_VERSION: ${BITCOIN_CORE_VERSION}
         UID: ${UID}
         GID: ${GID}
     volumes:
@@ -38,6 +39,7 @@ services:
       context: ./Dockerfiles/
       dockerfile: Dockerfile.electrs
       args:
+        ELECTRS_VERSION: ${ELECTRS_VERSION}
         UID: ${UID}
         GID: ${GID}
     volumes:
@@ -55,6 +57,7 @@ services:
       dockerfile: Dockerfile.lnd
       args:
         LND_ARCH: ${LND_ARCH}
+        LND_VERSION: ${LND_VERSION}
         UID: ${UID}
         GID: ${GID}
     ports:
