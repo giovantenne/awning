@@ -1,18 +1,18 @@
 FROM debian:bookworm-slim
-ARG VERSION=0.17.4
+ARG LND_VERSION
 ARG LND_ARCH
 ARG UID
 ARG GID
 RUN apt-get update && apt-get install -y wget curl gpg && rm -rf /var/lib/apt/lists/*
-RUN wget https://github.com/lightningnetwork/lnd/releases/download/v$VERSION-beta/lnd-linux-$LND_ARCH-v$VERSION-beta.tar.gz && \
-  wget https://github.com/lightningnetwork/lnd/releases/download/v$VERSION-beta/manifest-v$VERSION-beta.txt && \
-  wget https://github.com/lightningnetwork/lnd/releases/download/v$VERSION-beta/manifest-roasbeef-v$VERSION-beta.sig && \
-  wget https://github.com/lightningnetwork/lnd/releases/download/v$VERSION-beta/manifest-roasbeef-v$VERSION-beta.sig.ots
-RUN sha256sum --check manifest-v$VERSION-beta.txt --ignore-missing
+RUN wget https://github.com/lightningnetwork/lnd/releases/download/v$LND_VERSION/lnd-linux-$LND_ARCH-v$LND_VERSION.tar.gz && \
+  wget https://github.com/lightningnetwork/lnd/releases/download/v$LND_VERSION/manifest-v$LND_VERSION.txt && \
+  wget https://github.com/lightningnetwork/lnd/releases/download/v$LND_VERSION/manifest-roasbeef-v$LND_VERSION.sig && \
+  wget https://github.com/lightningnetwork/lnd/releases/download/v$LND_VERSION/manifest-roasbeef-v$LND_VERSION.sig.ots
+RUN sha256sum --check manifest-v$LND_VERSION.txt --ignore-missing
 RUN curl https://raw.githubusercontent.com/lightningnetwork/lnd/master/scripts/keys/roasbeef.asc | gpg --import
-RUN gpg --verify manifest-roasbeef-v$VERSION-beta.sig manifest-v$VERSION-beta.txt
-RUN tar -xvf lnd-linux-$LND_ARCH-v$VERSION-beta.tar.gz
-RUN install -m 0755 -o root -g root -t /usr/local/bin lnd-linux-$LND_ARCH-v$VERSION-beta/*
+RUN gpg --verify manifest-roasbeef-v$LND_VERSION.sig manifest-v$LND_VERSION.txt
+RUN tar -xvf lnd-linux-$LND_ARCH-v$LND_VERSION.tar.gz
+RUN install -m 0755 -o root -g root -t /usr/local/bin lnd-linux-$LND_ARCH-v$LND_VERSION/*
 RUN wget https://github.com/LN-Zap/lndconnect/releases/download/v0.2.0/lndconnect-linux-arm64-v0.2.0.tar.gz
 RUN tar -xvf lndconnect-linux-arm64-v0.2.0.tar.gz
 RUN install -m 0755 -o root -g root -t /usr/local/bin lndconnect-linux-arm64-v0.2.0/lndconnect

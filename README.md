@@ -68,6 +68,9 @@ The `.env` file contains some **Awning** setup parameters that you can/need to c
 | --- | --- |
 | `BITCOIN_ARCH` | Here you need to choose your computer CPU architecture. Write `aarch64` for ARM (Raspberry Pi, etc) or `x86_64` for Intel or AMD. |
 | `LND_ARCH` | Write `arm64` for ARM (Raspberry Pi, etc) or `amd64` for Intel or AMD. |
+| `BITCOIN_CORE_VERSION` | Bitcoin Core [version](https://github.com/bitcoin/bitcoin/releases) |
+| `LND_VERSION` | LND [version](https://github.com/lightningnetwork/lnd/releases) |
+| `ELECRTS_VERSION` | Electrs [version](https://github.com/romanz/electrs/releases) |
 | `RTL_PASSWORD` | Choose the password for accessing the *"Ride The Lightning"* web interface. You can change it any time but don't forget to restart the RTL container afterwards with `docker-compose restart rtl`. |
 |`LND_PASSWORD` | Choose the password to automatically protected and unlock the LND wallet (write `moneyprintergobrrr` if you are migrating from **Umbrel**). You will need to use this password again [here](#6). Changing this after the first setup will have no effect. |
 | `SCB_REPO` | Paste here the address of your new created Github repository. It should be something like `git@github.com:giovantenne/remote-lnd-backup.git`. |
@@ -186,7 +189,7 @@ $ URI=`docker exec tor cat /var/lib/tor/hidden_service_lnd_rest/hostname` && doc
 | `docker logs -f bitcoin` | Stream the logs for the *bitcoin/lnd/electrs* container |
 | `docker exec -it lnd bash` |  Connect to the *lnd* container so that you can use the `lncli` command (eg. `lncli getinfo`) |
 | `docker-compose restart bitcoin` | Restart the *bitcoin/lnd/electrs* container |
-| `docker-compose build --no-cache` | Rebuild all the containers from scratch |
+| `docker-compose build --no-cache` | Rebuild all the containers from scratch (eg. after changing bitcoin version in `.env`)|
 | `docker-compose down` | Stop all the containers |
 | `docker-compose up -d` | Start all the containers |
 
@@ -262,6 +265,14 @@ BTCPay server will run 3 additionals containers (requred files and directories a
 - [BTCPay-server](https://btcpayserver.org/)
 
 
+# How to update Bitcoin/LND/Electrs version
+
+If you wish to update Bitcoin/LND/Electrs version just edit the `.env` file and run the following commands to stop and rebuild the containers:
+
+```
+docker-compose down
+docker-compose up --build
+```
 
 
 # Donations/Project contributions
