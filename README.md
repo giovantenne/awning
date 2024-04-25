@@ -106,7 +106,7 @@ Check the status of the bitcoin daemon that was started with the following comma
 
 Those services open the following TCP ports on your host:
 
-| Parameter | Service | SSL |  Description |
+| Port | Service | SSL |  Description |
 | --- | --- | --- | --- |
 | `50002` | Electrs | :white_check_mark: | Electrs  |
 | `8080` | LND | :white_check_mark: | Rest API for LND  |
