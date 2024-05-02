@@ -286,7 +286,7 @@ $ git stash apply
 ```
 Resolve any `git` conflicts and run the following command:
 ```
-$ docker-compose up --build
+$ docker-compose up -d --build
 ```
 # Support
 
