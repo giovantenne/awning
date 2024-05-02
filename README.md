@@ -1,6 +1,5 @@
 # A dockerized Bitcoin + LND + BTCPay  node
 
-
 Something like [Umbrel](https://umbrel.com) but lighter and portable.
 Something like [RaspiBolt](https://raspibolt.org/) but easier and automated. Bitcoin/Lightning-Network oriented with no frills.
 
@@ -29,16 +28,16 @@ $ sudo apt-get install -y docker.io docker-compose git
 Please follow [this guide](https://docs.docker.com/engine/install/linux-postinstall/) if you don't want to preface the `docker` and the `docker-compose` commands with `sudo`.
 In this guide  `sudo` will be always omitted.
 
+All the commands need to be run on the **Awning** root directory.
 
 <a name="1"></a>
 # Before you begin
 
 Clone or download this repository and enter the project directory.
-  ```sh
-  $ git clone https://github.com/giovantenne/awning.git
-  $ cd awning
-  ```
-
+```sh
+$ git clone https://github.com/giovantenne/awning.git
+$ cd awning
+```
 
 ## LND channel backups preparation
 The Static Channels Backup (SCB) is a feature of LND that allows for the on-chain recovery of lightning channel balances in the case of a bricked node. Despite its name, it does not allow the recovery of your LN channels but increases the chance that you'll recover all (or most) of your off-chain (local) balances.
@@ -60,8 +59,8 @@ The Static Channels Backup (SCB) is a feature of LND that allows for the on-chai
 ## Edit and understand the .env file
 
 The `.env` file contains some **Awning** setup parameters that you can/need to customize. Just make a copy of the sample file and edit it.
-```
-  $ cp .env.sample .env
+```sh
+$ cp .env.sample .env
 ```
 
 | Parameter | Description |
@@ -77,14 +76,13 @@ The `.env` file contains some **Awning** setup parameters that you can/need to c
 | `LND_VERSION` | LND [version](https://github.com/lightningnetwork/lnd/releases) |
 | `ELECRTS_VERSION` | Electrs [version](https://github.com/romanz/electrs/releases) |
 
-
 <a name="4"></a>
 # How to begin
 
 Run the following command:
-  ```sh
-  $ docker-compose up -d --build
-  ```
+```sh
+$ docker-compose up -d --build
+```
 This will spin-up the following services/containers in background:
 - [Bitcoin Core](https://github.com/bitcoin/bitcoin)
 - [Electrs](https://github.com/bitcoin/bitcoin)
@@ -100,9 +98,9 @@ After all the images are built, “bitcoind” should start, begin to sync and v
 
 Check the status of the bitcoin daemon that was started with the following command. Exit with Ctrl-C
 
-  ```sh
-  $ docker logs -f bitcoin
-  ```
+```sh
+$ docker logs -f bitcoin
+```
 
 Those services open the following TCP ports on your host:
 
@@ -115,8 +113,6 @@ Those services open the following TCP ports on your host:
 | `8083` | BTCPay Server (optional)| :white_check_mark: | BTCPay server web interface|
 | `8084` | BTCPay Server (optional)| :white_large_square: | BTCPay server web interface |
 
-
-
 # Finish the setup
 
 Once you first start the containers there are still a couple of steps to complete:
@@ -126,9 +122,9 @@ Once you first start the containers there are still a couple of steps to complet
 
 Run this command:
 
-  ```sh
-  $ docker logs scb 2> /dev/null | grep -o 'ssh-rsa.*' | head -1
-  ```
+```sh
+$ docker logs scb 2> /dev/null | grep -o 'ssh-rsa.*' | head -1
+```
 
 * Go back to the GitHub repository webpage
 * Click on "Settings", then "Deploy keys", then "Add deploy key"
@@ -141,9 +137,9 @@ Run this command:
 
 If you are migrating from **Umbrel** or from an existing LND node just copy your data to the `./data/lnd` directory before the `docker-compose up -d --build` command and skip the rest of this step, otherwise run this command:
 
-  ```sh
-  $ docker exec -it lnd lncli create
-  ```
+```sh
+$ docker exec -it lnd lncli create
+```
 
 Enter your password as wallet password (it must be exactly the same you stored in `.env` as [LND_PASSWORD](#3)).
 
@@ -157,11 +153,10 @@ These 24 words is all that you need to restore the Bitcoin on-chain wallet. The 
 
 # Use Electrs (via TOR)
 
-Run the following command from the awning root directory to retrieve the Electrs TOR address to use in your wallet:
-```
+Run the following command from the **Awning** root directory to retrieve the Electrs TOR address to use in your wallet:
+```sh
 $ echo `cat ./data/tor/hidden_service_electrs/hostname`:50001
 ```
-
 
 # Accessing RTL web interface (local)
 
@@ -180,15 +175,11 @@ Replace `localhost` with the IP of your node if you are runnin **Awning** on a d
 - Enter a Nickname for your node (e.g., AwningNode)
 - Click on “SCAN LNDCONNECT CONFIG” and, if prompted, allow Zeus to use the camera
 - Scan the QR code generated with the following command. It will be a big QR code, so maximize your terminal window and use CTRL+- to shrink the code further to fit the screen
-```
+```sh
 $ URI=`cat ./data/tor/hidden_service_lnd_rest/hostname` && docker exec lnd lndconnect --host $URI --port 8080
 ```
 
 - Click on “SAVE NODE CONFIG”. Zeus is now connecting to your node, and it might take a while the first time.
-
-
-
-
 
 # Useful comands
 | Command | Description |
@@ -202,11 +193,8 @@ $ URI=`cat ./data/tor/hidden_service_lnd_rest/hostname` && docker exec lnd lndco
 | `docker-compose up -d ` | Start all the containers |
 | `docker-compose up -d --build` | Rebuild and start all the containers |
 
-
-
-
 # Directories structure
-```bash
+```sh
 ├── configs
 │   ├── bitcoin.conf
 │   ├── electrs.toml
@@ -244,13 +232,11 @@ $ URI=`cat ./data/tor/hidden_service_lnd_rest/hostname` && docker exec lnd lndco
 
 ```
 
-
 | Directory | Description |
 | --- | --- |
 | `configs` | Here you can find all the configuration files. Feel free to edit them as you like, but please be carefull to not mess-up with authentication method: **Awning** currently uses cookies authentication between services instead of RPC. |
 | `data` | Here is where the data are persisted. The Bitcoin Blockchain, the Electrs indexes, the LND channels, etc. are all stored here. |
 | `Dockerfiles` | Here you can find and inspect all the files used to build the images. **Don't trust, verify**! |
-
 
 <a name="7"></a>
 # BTCPay Server (optional)
@@ -262,38 +248,33 @@ You can easily run your own self-hosted instance of [BTCPay Server](https://btcp
 | `docker-compose.yml` | <ul><li> Replace the `depends_on` directive under the `nginx` section with the one provided.</li><li>Uncomment the `ports` **8083** and **8084** under the `nginx` section. </li> <li>Uncomment the `btcpay`, `nbx` and `postgres` services blocks.</li></ul>|
 | `configs/nginx-reverse-proxy.conf` | Uncomment the `upstream` btcpay and **8083**, **8084** `server` blocks. |
 
-
-
-
 Run `docker-compose down` and then `docker-compose up -d` again.
-
 
 BTCPay server will run 3 additionals containers (requred files and directories are already present on this repository):
 - [Postgres](https://github.com/btcpayserver/dockerfile-deps/tree/master/Postgres/13.13)
 - [NBXplorer](https://github.com/dgarage/NBXplorer)
 - [BTCPay-server](https://btcpayserver.org/)
 
-
 # How to update Bitcoin/LND/Electrs version
 
 If you wish to update Bitcoin/LND/Electrs version just edit the `.env` file and run the following commands to stop and rebuild the containers:
 
-```
+```sh
 $ docker-compose down
 $ docker-compose up -d
 ```
 # How to update Awning
 
-If you wish to update Awning to the last version just run the following commands:
+If you wish to update **Awning** to the last version just run the following commands:
 
-```
+```sh
 $ docker-compose down
 $ git stash
 $ git pull
 $ git stash apply
 ```
 Resolve any `git` conflicts and run the following command:
-```
+```sh
 $ docker-compose up -d --build
 ```
 # Support
