@@ -159,7 +159,7 @@ These 24 words is all that you need to restore the Bitcoin on-chain wallet. The 
 
 Run the following command to retrieve the Electrs TOR address to use in your wallet:
 ```
-$ echo `sudo docker exec tor cat /var/lib/tor/hidden_service_electrs/hostname`:50001
+$ echo `docker exec tor cat /var/lib/tor/hidden_service_electrs/hostname`:50001
 ```
 
 
