@@ -52,7 +52,7 @@ services:
   lnd:
     container_name: lnd
     user: "${UID}:${GID}"
-    depends_on: [bitcoin, tor]
+    depends_on: [bitcoin]
     build:
       context: ./Dockerfiles/
       dockerfile: Dockerfile.lnd
@@ -110,8 +110,8 @@ services:
 
   nginx:
     container_name: nginx
-    depends_on: [rtl, electrs, lnd]
-    # depends_on: [rtl, electrs, lnd, btcpay]
+    depends_on: [rtl, electrs]
+    # depends_on: [rtl, electrs, btcpay]
     build:
       context: ./Dockerfiles/
       dockerfile: Dockerfile.nginx

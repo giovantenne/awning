@@ -66,16 +66,16 @@ The `.env` file contains some **Awning** setup parameters that you can/need to c
 
 | Parameter | Description |
 | --- | --- |
+| `UID` | The uid (user id) of your current user. Use this command to retrieve it: `id -u`. |
+| `GID` | The gid (group id) of your current user. Use this command to retrieve it: `id -g`. |
 | `BITCOIN_ARCH` | Here you need to choose your computer CPU architecture. Write `aarch64` for ARM (Raspberry Pi, etc) or `x86_64` for Intel or AMD. |
 | `LND_ARCH` | Write `arm64` for ARM (Raspberry Pi, etc) or `amd64` for Intel or AMD. |
-| `BITCOIN_CORE_VERSION` | Bitcoin Core [version](https://github.com/bitcoin/bitcoin/releases) |
-| `LND_VERSION` | LND [version](https://github.com/lightningnetwork/lnd/releases) |
-| `ELECRTS_VERSION` | Electrs [version](https://github.com/romanz/electrs/releases) |
 | `RTL_PASSWORD` | Choose the password for accessing the *"Ride The Lightning"* web interface. You can change it any time but don't forget to restart the RTL container afterwards with `docker-compose restart rtl`. |
 |`LND_PASSWORD` | Choose the password to automatically protected and unlock the LND wallet (write `moneyprintergobrrr` if you are migrating from **Umbrel**). You will need to use this password again [here](#6). Changing this after the first setup will have no effect. |
 | `SCB_REPO` | Paste here the address of your new created Github repository. It should be something like `git@github.com:giovantenne/remote-lnd-backup.git`. |
-| `UID` | The uid (user id) of your current user. Use this command to retrieve it: `id -u`. |
-| `GID` | The gid (group id) of your current user. Use this command to retrieve it: `id -g`. |
+| `BITCOIN_CORE_VERSION` | Bitcoin Core [version](https://github.com/bitcoin/bitcoin/releases) |
+| `LND_VERSION` | LND [version](https://github.com/lightningnetwork/lnd/releases) |
+| `ELECRTS_VERSION` | Electrs [version](https://github.com/romanz/electrs/releases) |
 
 
 <a name="4"></a>
@@ -83,7 +83,7 @@ The `.env` file contains some **Awning** setup parameters that you can/need to c
 
 Run the following command:
   ```sh
-  $ docker-compose up -d
+  $ docker-compose up -d --build
   ```
 This will spin-up the following services/containers in background:
 - [Bitcoin Core](https://github.com/bitcoin/bitcoin)
@@ -96,7 +96,7 @@ This will spin-up the following services/containers in background:
 
 The first time it will take some time to build all the images from scratch (especially compiling the Electrs binary can take up to one hour).
 
-After all the images are built, “bitcoind” should start, begin to sync and validate the Bitcoin blockchain. If you already downloaded the blockchain somewhere else, you can just copy the data to the `./data/bitcoin` directory before the `docker-compose up -d` command.
+After all the images are built, “bitcoind” should start, begin to sync and validate the Bitcoin blockchain. If you already downloaded the blockchain somewhere else, you can just copy the data to the `./data/bitcoin` directory before the `docker-compose up -d --build` command.
 
 Check the status of the bitcoin daemon that was started with the following command. Exit with Ctrl-C
 
@@ -139,7 +139,7 @@ Run this command:
 <a name="6"></a>
 ### Create or restore the LND wallet
 
-If you are migrating from **Umbrel** or from an existing LND node just copy your data to the `./data/lnd` directory before the `docker-compose up -d` command and skip the rest of this step, otherwise run this command:
+If you are migrating from **Umbrel** or from an existing LND node just copy your data to the `./data/lnd` directory before the `docker-compose up -d --build` command and skip the rest of this step, otherwise run this command:
 
   ```sh
   $ docker exec -it lnd lncli create
@@ -191,7 +191,8 @@ $ URI=`docker exec tor cat /var/lib/tor/hidden_service_lnd_rest/hostname` && doc
 | `docker-compose restart bitcoin` | Restart the *bitcoin/lnd/electrs* container |
 | `docker-compose build --no-cache` | Rebuild all the containers from scratch (eg. after changing bitcoin version in `.env`)|
 | `docker-compose down` | Stop all the containers |
-| `docker-compose up -d` | Start all the containers |
+| `docker-compose up -d ` | Start all the containers |
+| `docker-compose up -d --build` | Rebuild and start all the containers |
 
 
 
@@ -270,10 +271,26 @@ BTCPay server will run 3 additionals containers (requred files and directories a
 If you wish to update Bitcoin/LND/Electrs version just edit the `.env` file and run the following commands to stop and rebuild the containers:
 
 ```
-docker-compose down
-docker-compose up --build
+$ docker-compose down
+$ docker-compose up -d
 ```
+# How to update Awning
 
+If you wish to update Awning to the last version just run the following commands:
+
+```
+$ docker-compose down
+$ git stash
+$ git pull
+$ git stash apply
+```
+Resolve any `git` conflicts and run the following command:
+```
+$ docker-compose up --build
+```
+# Support
+
+For any questions or issues you can join our [Telegram support channel](https://t.me/awning_node) or open a [Github issue](https://github.com/giovantenne/awning/issues/new).
 
 # Donations/Project contributions
 If you would like to contribute and help dev team with this project you can send a donation to the following LN address ⚡`donate@btcpay.cryptogadgets.net`⚡ or on-chain   `bc1qg2t8vnahzv5yy7e885l0a59ggagne9nxdvts4t`
