@@ -155,7 +155,7 @@ These 24 words is all that you need to restore the Bitcoin on-chain wallet. The 
 
 **Write these 24 words down manually on a piece of paper and store it in a safe place.**
 
-# Use Elecrs (via TOR)
+# Use Electrs (via TOR)
 
 Run the following command to retrieve the Electrs TOR address to use in your wallet:
 ```
@@ -163,7 +163,7 @@ $ echo `sudo docker exec tor cat /var/lib/tor/hidden_service_electrs/hostname`:5
 ```
 
 
-# Accessing RTL web interface
+# Accessing RTL web interface (local)
 
 Ride The Lightining is accessible on both `http` and `https` with a self signed SSL certificate (so expect a warning message from your browser) using the [password](#3) choosen on the `.env` file.
 
