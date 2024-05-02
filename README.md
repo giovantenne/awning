@@ -157,9 +157,9 @@ These 24 words is all that you need to restore the Bitcoin on-chain wallet. The 
 
 # Use Electrs (via TOR)
 
-Run the following command to retrieve the Electrs TOR address to use in your wallet:
+Run the following command from the awning root directory to retrieve the Electrs TOR address to use in your wallet:
 ```
-$ echo `docker exec tor cat /var/lib/tor/hidden_service_electrs/hostname`:50001
+$ echo `cat ./data/tor/hidden_service_electrs/hostname`:50001
 ```
 
 
@@ -181,7 +181,7 @@ Replace `localhost` with the IP of your node if you are runnin **Awning** on a d
 - Click on “SCAN LNDCONNECT CONFIG” and, if prompted, allow Zeus to use the camera
 - Scan the QR code generated with the following command. It will be a big QR code, so maximize your terminal window and use CTRL+- to shrink the code further to fit the screen
 ```
-$ URI=`docker exec tor cat /var/lib/tor/hidden_service_lnd_rest/hostname` && docker exec lnd lndconnect --host $URI --port 8080
+$ URI=`cat ./data/tor/hidden_service_lnd_rest/hostname` && docker exec lnd lndconnect --host $URI --port 8080
 ```
 
 - Click on “SAVE NODE CONFIG”. Zeus is now connecting to your node, and it might take a while the first time.
