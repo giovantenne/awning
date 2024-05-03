@@ -17,7 +17,7 @@ RUN install -m 0755 -o root -g root -t /usr/local/bin lnd-linux-$LND_ARCH-v$LND_
 RUN wget https://github.com/LN-Zap/lndconnect/releases/download/v0.2.0/lndconnect-linux-$LND_ARCH-v0.2.0.tar.gz
 
 RUN tar -xvf lndconnect-linux-$LND_ARCH-v0.2.0.tar.gz
-RUN install -m 0755 -o root -g root -t /usr/local/bin lndconnect-linux-arm64-v0.2.0/lndconnect
+RUN install -m 0755 -o root -g root -t /usr/local/bin lndconnect-linux-$LND_ARCH-v0.2.0/lndconnect
 ADD entrypoints/lnd.sh /lnd.sh
 RUN chmod +x /lnd.sh
 RUN groupadd lnd -g$GID
