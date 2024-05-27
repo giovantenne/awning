@@ -1,0 +1,13 @@
+  tor:
+    container_name: tor
+    user: "${UID}:${GID}"
+    build:
+      context: ./Dockerfiles/
+      dockerfile: Dockerfile.tor
+      args:
+        UID: ${UID}
+        GID: ${GID}
+    volumes:
+      - ./data/tor:/var/lib/tor/
+      - ./configs/torrc:/etc/tor/torrc:ro
+    restart: unless-stopped

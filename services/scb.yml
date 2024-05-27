@@ -1,0 +1,16 @@
+  scb:
+    container_name: scb
+    user: "${UID}:${GID}"
+    depends_on: [lnd]
+    build:
+      context: ./Dockerfiles/
+      dockerfile: Dockerfile.scb
+      args:
+        UID: ${UID}
+        GID: ${GID}
+    volumes:
+      - ./data/scb:/data
+      - ./data/lnd:/lnd:ro
+    environment:
+      SCB_REPO: ${SCB_REPO}
+    restart: unless-stopped
