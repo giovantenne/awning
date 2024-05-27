@@ -1,0 +1,22 @@
+  nbx:
+    container_name: nbx
+    user: "${UID}:${GID}"
+    image: nicolasdorier/nbxplorer:2.5.0@sha256:bbff2b6703ed240da263e6ba01deacf2c6520d371d6a0202e87a9e8c7f97b158
+    depends_on: [postgres, bitcoin]
+    volumes:
+      - ./data/nbx:/data
+      - ./data/bitcoin:/bitcoin:ro
+    environment:
+      NBXPLORER_DATADIR: "/data"
+      NBXPLORER_NETWORK: "mainnet"
+      NBXPLORER_BIND: 0.0.0.0:32838
+      NBXPLORER_CHAINS: "btc"
+      NBXPLORER_SIGNALFILEDIR: "/data"
+      NBXPLORER_BTCRPCURL: "http://bitcoin:8332"
+      NBXPLORER_BTCRPCCOOKIEFILE: "/bitcoin/.cookie"
+      NBXPLORER_BTCNODEENDPOINT: bitcoin:8333
+      NBXPLORER_POSTGRES: User ID=postgres;Host=postgres;Port=5432;Application Name=nbxplorer;MaxPoolSize=20;Database=nbxplorermainnet
+      NBXPLORER_AUTOMIGRATE: 1
+      NBXPLORER_NOMIGRATEEVTS: 1
+      NBXPLORER_BTCHASTXINDEX: 1
+    restart: unless-stopped
