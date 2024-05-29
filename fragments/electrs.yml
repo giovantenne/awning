@@ -1,0 +1,16 @@
+  electrs:
+    container_name: electrs
+    user: "${UID}:${GID}"
+    depends_on: [bitcoin]
+    build:
+      context: ./dockerfiles/
+      dockerfile: Dockerfile.electrs
+      args:
+        ELECTRS_VERSION: ${ELECTRS_VERSION}
+        UID: ${UID}
+        GID: ${GID}
+    volumes:
+      - ./configs/electrs.toml:/data/electrs.toml:ro
+      - ./data/electrs:/data
+      - ./data/bitcoin:/data/.bitcoin:ro
+    restart: unless-stopped

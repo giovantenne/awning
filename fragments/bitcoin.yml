@@ -1,0 +1,16 @@
+  bitcoin:
+    user: "${UID}:${GID}"
+    depends_on: [tor]
+    build:
+      context: ./dockerfiles/
+      dockerfile: Dockerfile.bitcoin
+      args:
+        BITCOIN_ARCH: ${BITCOIN_ARCH}
+        BITCOIN_CORE_VERSION: ${BITCOIN_CORE_VERSION}
+        UID: ${UID}
+        GID: ${GID}
+    volumes:
+      - ./data/bitcoin:/data/.bitcoin
+      - ./data/tor:/data/cookie:ro
+      - ./configs/bitcoin.conf:/data/.bitcoin/bitcoin.conf:ro
+    restart: unless-stopped
