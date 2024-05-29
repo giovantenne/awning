@@ -176,6 +176,10 @@ upload_scb_repo_deploy_key() {
   echo -e "Press any to check your setup"
   read -n 1 -s -r
   echo -e "Performing test. Please wait..."
+
+  echo "github.com ssh-ed25519 <REDACTED>
+  github.com ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBEmKSENjQEezOmxkZMy7opKgwFB9nkt5YRrYMjNuG5N87uRgg6CLrbo5wAdT/y6v0mKV0U2w0WZ2YB/++Tpockg=
+  github.com ssh-rsa <REDACTED>" >> ./data/scb/.ssh/known_hosts
   
   # Try to create a temporary branch and push
   rm -rf ./data/scb/test
@@ -188,7 +192,7 @@ upload_scb_repo_deploy_key() {
   git commit -am "test"  >/dev/null 2>&1
   # Try to push the temporary branch
   while true; do
-    GIT_SSH_COMMAND="ssh -o IdentitiesOnly=yes -i ../.ssh/id_rsa" git push -f $SCB_REPO test >/dev/null 2>&1
+    GIT_SSH_COMMAND="ssh -o UserKnownHostsFile=../.ssh/known_hosts -o IdentitiesOnly=yes -i ../.ssh/id_rsa" git push -f $SCB_REPO test >/dev/null 2>&1
     # Check if the push succeeded
     if [ $? -ne 0 ]; then
       echo -e "${BOLD}${RED}Test failed!${NC}${NB}"
@@ -198,7 +202,7 @@ upload_scb_repo_deploy_key() {
       echo -e "Performing test. Please wait..."
     else
       # Cleanup
-      GIT_SSH_COMMAND="ssh -o IdentitiesOnly=yes -i ../.ssh/id_rsa" git push -f "$SCB_REPO" --delete test >/dev/null 2>&1
+      GIT_SSH_COMMAND="ssh -o UserKnownHostsFile=../.ssh/known_hosts -o IdentitiesOnly=yes -i ../.ssh/id_rsa" git push -f "$SCB_REPO" --delete test >/dev/null 2>&1
       cd ../../../
       rm -rf ./data/scb/test
       echo -e ""
@@ -285,7 +289,7 @@ compose_build() {
   echo "Press any key to continue..."
   read -n 1 -s -r
   clear
-  $($compose_command build) 
+  $compose_command build
 }
 
 # Function to update UID and GID in .env file
