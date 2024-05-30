@@ -37,12 +37,13 @@ BITCOIN_VERSIONS=($(get_latest_versions "bitcoin/bitcoin"))
 LND_VERSIONS=($(get_latest_versions "lightningnetwork/lnd"))
 ELECTRS_VERSIONS=($(get_latest_versions "romanz/electrs"))
 
-
 # Print header
 print_header() {
-  clear
-  echo -e "${BOLD}${ORANGE}WELCOME TO AWNING${NC}${NB} ($1)"
-  echo -e "------------------------"
+  echo "-----------"
+  echo -en "${BOLD}${ORANGE}$1) Awning > ${NC}${NB} "
+  echo -e "${BOLD}$2${NB}"
+  echo "-----------"
+  sleep 1
 }
 
 # Function to check if Bitcoin blockchain is downloaded
@@ -83,11 +84,12 @@ is_ssh_github_repo() {
 }
 
 show_welcome() {
-  print_header $1
-  echo -e "This script will only create a ${UNDERLINE}docker-compose.yml${NC} and a ${UNDERLINE}.env${NC} file on this directory making ${ORANGE}${BOLD}Awning${NB}${NC} light and portable."
-  echo -e "Just run this script again if you move this directory on a new computer."
-  echo -e ""
+  # print_header $1
+
+  echo -e "Welcome to the ${ORANGE}${BOLD}Awning${NB}${NC} setup tutorial!"
+  echo -e "This script will guide you through setting up a full dockerized Bitcoin/LND/BTCPay server on your PC."
   if ! is_bitcoin_blockchain_downloaded; then
+    echo -e ""
     echo -e "It seems that you need to download the entire ${ORANGE}Bitcoin${NC} blockchain. This will take some time..."
     echo -e "If you already have the blockchain downloaded somewhere, please move it to ${UNDERLINE}./data/bitcoin/${NC} now."
   fi
@@ -98,9 +100,7 @@ show_welcome() {
 }
 
 insert_scb_repo() {
-  print_header $1
-  echo -e "${BOLD}LND channel backups preparation ${NB}"
-  echo -e ""
+  print_header $1 "LND channel backups preparation"
   echo -e "The Static Channels Backup (SCB) is a feature of ${LIGHT_BLUE}LND${NC} that allows for the on-chain recovery of lightning channel balances in the case of a bricked node. Despite its name, it does not allow the recovery of your LN channels but increases the chance that you'll recover all (or most) of your off-chain (local) balances."
   echo -e ""
   echo -e "${ORANGE}${BOLD}Awning${NB}${NC} will automatically upload a copy of your ${UNDERLINE}channel.backup${NC} every time it changes on a Github repository you own, so you will need to create one and provide upload credential later."
@@ -121,16 +121,13 @@ insert_scb_repo() {
     if is_ssh_github_repo "$SCB_REPO"; then
       break
     else
-      echo -e "${BOLD}Invalid address${NB}. It should be something like ${UNDERLINE}git@github.com:giovantenne/remote-lnd-backup.git${NC}"
-      echo -e ""
+      echo -e "${RED}${BOLD}Invalid address${NB}${NC}"
     fi
   done
 }
 
 upload_scb_repo_deploy_key() {
-  print_header $1
-  echo -e "${BOLD}Authorize SCB (Static Channel Backup) to be uploaded on Github${NB}"
-  echo -e ""
+  print_header $1 "Authorize SCB (Static Channel Backup) to be uploaded on Github"
 
   if [ ! -f ./data/scb/.ssh/id_rsa.pub ]; then
     if check_root_needed; then
@@ -159,9 +156,9 @@ upload_scb_repo_deploy_key() {
     echo -e "SSH key already present in ${UNDERLINE}./data/scb/.ssh/${NC}"
   fi
 
-  echo "-----------------------"
+  echo "************************"
   cat ./data/scb/.ssh/id_rsa.pub
-  echo "-----------------------"
+  echo "************************"
   # Extract the username and repository name using parameter expansion
   # The SSH URL is expected to be in the format: git@github.com:username/repository.git
   local username=$(echo $SCB_REPO | cut -d':' -f2 | cut -d'/' -f1)
@@ -173,7 +170,7 @@ upload_scb_repo_deploy_key() {
   echo -e "- Tick the box 'Allow write access' to enable this key to push changes to the repository"
   echo -e "- Click 'Add key'"
   echo -e ""
-  echo -e "Press any to check your setup"
+  echo -e "Press ENTER to test your setup"
   read -n 1 -s -r
   echo -e "Performing test. Please wait..."
 
@@ -186,27 +183,28 @@ upload_scb_repo_deploy_key() {
   mkdir -p ./data/scb/test
   cd ./data/scb/test
   git init >/dev/null 2>&1
-  git checkout -b test >/dev/null 2>&1
   touch test >/dev/null 2>&1
   git add test   >/dev/null 2>&1
   git commit -am "test"  >/dev/null 2>&1
   # Try to push the temporary branch
   while true; do
-    GIT_SSH_COMMAND="ssh -o UserKnownHostsFile=../.ssh/known_hosts -o IdentitiesOnly=yes -i ../.ssh/id_rsa" git push -f $SCB_REPO test >/dev/null 2>&1
+    GIT_SSH_COMMAND="ssh -o UserKnownHostsFile=../.ssh/known_hosts -o IdentitiesOnly=yes -i ../.ssh/id_rsa" git push -f $SCB_REPO master >/dev/null 2>&1
     # Check if the push succeeded
     if [ $? -ne 0 ]; then
-      echo -e "${BOLD}${RED}Test failed!${NC}${NB}"
+      echo -e "${RED}${BOLD}Test failed!${NB}${NC}"
       echo -e "You do not have permission to push to ${UNDERLINE}$SCB_REPO${NC}"
-      echo -e "Please follow the above steps again and press any key to try again."
+      echo -e "Please follow the above steps again and press ENTER to try again or CRTL-C to exit the setup."
       read -n 1 -s -r
       echo -e "Performing test. Please wait..."
     else
       # Cleanup
-      GIT_SSH_COMMAND="ssh -o UserKnownHostsFile=../.ssh/known_hosts -o IdentitiesOnly=yes -i ../.ssh/id_rsa" git push -f "$SCB_REPO" --delete test >/dev/null 2>&1
+      rm test
+      git commit -am "Test successful"  >/dev/null 2>&1
+      GIT_SSH_COMMAND="ssh -o UserKnownHostsFile=../.ssh/known_hosts -o IdentitiesOnly=yes -i ../.ssh/id_rsa" git push -f $SCB_REPO master >/dev/null 2>&1
       cd ../../../
       rm -rf ./data/scb/test
       echo -e ""
-      echo -e "${BOLD}${GREEN}Test performed successfully${NC}${NB}"
+      echo -e "${GREEN}${BOLD}Test performed successfully${NB}${NC}"
       echo "Press any key to continue..."
       read -n 1 -s -r
       break
@@ -215,17 +213,15 @@ upload_scb_repo_deploy_key() {
 }
 
 choose_rtl_password() {
-  print_header $1
-  echo -e "${BOLD}Choose your ${GREEN}Ride The Lightning${NC} ${BOLD}password${NB}"
+  print_header $1 "${BOLD}Choose your 'Ride The Lightning' password${NB}"
+  read -s -p "Please choose your password: " RTL_PASSWORD
   echo -e ""
-  echo -n "Enter value for RTL_PASSWORD: "
-  read RTL_PASSWORD
 }
 
 enable_btcpay() {
-  print_header $1
+  print_header $1 "${BOLD}BTCPay server${NB}"
   while true; do
-    echo -n "Do you want to run btcpay-server? (yes/no, default is no): "
+    echo -n "Do you want to run BTCPay-server? (yes/no, default is no): "
     read RUN_BTCPAY
     RUN_BTCPAY=${RUN_BTCPAY:-no}
     if [[ "$RUN_BTCPAY" =~ ^(yes|no)$ ]]; then
@@ -243,8 +239,6 @@ function check_lnd(){
 }
 
 function create_env_file() {
-# LND_PASSWORD=$(generate_password)
-# RUN_BTCPAY=${run_btcpay}
   cat <<EOT > .env
 UID=${MYUID}
 GID=${MYGID}
@@ -281,15 +275,25 @@ EOT
 }
 
 compose_build() {
-  print_header $1
-  echo -e "${BOLD}WELL DONE!!!${NB}"
-  echo -e "${ORANGE}${BOLD}Awning${NB}${NC} in now ready to build your Docker images."
+  print_header $1 "You are now ready to build your Docker images"
   echo -e "The first time it will take some time to build all the images from scratch (especially compiling the Electrs binary can take up to one hour)."
   echo -e ""
   echo "Press any key to continue..."
   read -n 1 -s -r
-  clear
   $compose_command build
+  echo -e "${GREEN}${BOLD}Build completed${NB}${NC}"
+  echo "Press any key to continue..."
+  read -n 1 -s -r
+}
+
+compose_up() {
+  print_header $1 "Start the node!"
+  echo -e "You are now ready to start your node :-)"
+  echo -e ""
+  echo "Press any key to continue..."
+  read -n 1 -s -r
+  clear
+  $compose_command up -d
 }
 
 # Function to update UID and GID in .env file
@@ -426,16 +430,18 @@ fi
 docker_command=$(check_docker)
 
 if [ ! -f .env ]; then
-  show_welcome "1/6"
-  insert_scb_repo "2/6"
-  upload_scb_repo_deploy_key "3/6"
-  choose_rtl_password "4/6"
-  enable_btcpay "5/6"
+  show_welcome
+  insert_scb_repo "1/6"
+  upload_scb_repo_deploy_key "2/6"
+  choose_rtl_password "3/6"
+  enable_btcpay "4/6"
   check_lnd
   create_env_file
   create_compose
-  # compose_build
+  compose_build "5/6"
+  compose_up "6/6"
+  display_menu
 else
-  compose_build
+  display_menu
 fi
 

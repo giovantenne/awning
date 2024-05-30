@@ -1,5 +1,4 @@
   electrs:
-    container_name: electrs
     user: "${UID}:${GID}"
     depends_on: [bitcoin]
     build:

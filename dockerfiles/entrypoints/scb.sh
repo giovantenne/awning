@@ -24,7 +24,6 @@ REMOTE_BACKUP_DIR="/data/backups"
 
 # check if repo is present
 if [ ! -d $REMOTE_BACKUP_DIR ]; then
-  echo "pre clone"
   while ! git clone $SCB_REPO $REMOTE_BACKUP_DIR
   do
     sleep 30
@@ -80,7 +79,8 @@ run () {
         run_remote_backup_on_change "$REMOTE_BACKUP_FILE"
       fi
     else
-      sleep 5
+      echo "LND not ready. Waiting 30 seconds..."
+      sleep 30
     fi
 
   done
