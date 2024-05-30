@@ -33,9 +33,6 @@ MYGID=$(id -g)
 ARCH_INFO=($(detect_architecture))
 BITCOIN_ARCH=${ARCH_INFO[0]}
 LND_ARCH=${ARCH_INFO[1]}
-BITCOIN_VERSIONS=($(get_latest_versions "bitcoin/bitcoin"))
-LND_VERSIONS=($(get_latest_versions "lightningnetwork/lnd"))
-ELECTRS_VERSIONS=($(get_latest_versions "romanz/electrs"))
 
 # Print header
 print_header() {
@@ -43,7 +40,7 @@ print_header() {
   echo -en "${BOLD}${ORANGE}$1) Awning > ${NC}${NB} "
   echo -e "${BOLD}$2${NB}"
   echo "-----------"
-  sleep 1
+  # sleep 1
 }
 
 # Function to check if Bitcoin blockchain is downloaded
@@ -57,9 +54,8 @@ is_bitcoin_blockchain_downloaded() {
 }
 # Function to check if LND is initialized
 is_lnd_initialized() {
-  local lnd_data_dir="./data/lnd/data"
-  local lnd_wallet_file="./data/lnd/chain/bitcoin/mainnet/wallet.db"
-  if [ -d "$lnd_data_dir" ] && [ -f "$lnd_wallet_file" ]; then
+  local channel_backup_file="./data/lnd/chain/bitcoin/mainnet/channel.backup"
+  if [ -f "$channel_backup_file" ]; then
     return 0
   else
     return 1
@@ -89,9 +85,14 @@ show_welcome() {
   echo -e "Welcome to the ${ORANGE}${BOLD}Awning${NB}${NC} setup tutorial!"
   echo -e "This script will guide you through setting up a full dockerized Bitcoin/LND/BTCPay server on your PC."
   if ! is_bitcoin_blockchain_downloaded; then
-    echo -e ""
+    echo -e "----------------"
     echo -e "It seems that you need to download the entire ${ORANGE}Bitcoin${NC} blockchain. This will take some time..."
     echo -e "If you already have the blockchain downloaded somewhere, please move it to ${UNDERLINE}./data/bitcoin/${NC} now."
+  fi
+  if ! is_lnd_initialized; then
+    echo -e "----------------"
+    echo -e "It seems that you need to download initialize your ${LIGHT_BLUE}LND${NC} wallet."
+    echo -e "If you already have your LND data somewhere, please move it to ${UNDERLINE}./data/lnd/${NC} now."
   fi
 
   echo -e ""
@@ -172,42 +173,49 @@ upload_scb_repo_deploy_key() {
   echo -e ""
   echo -e "Press ENTER to test your setup"
   read -n 1 -s -r
-  echo -e "Performing test. Please wait..."
 
   echo "github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl
   github.com ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBEmKSENjQEezOmxkZMy7opKgwFB9nkt5YRrYMjNuG5N87uRgg6CLrbo5wAdT/y6v0mKV0U2w0WZ2YB/++Tpockg=
   github.com ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQCj7ndNxQowgcQnjshcLrqPEiiphnt+VTTvDP6mHBL9j1aNUkY4Ue1gvwnGLVlOhGeYrnZaMgRK6+PKCUXaDbC7qtbW8gIkhL7aGCsOr/C56SJMy/BCZfxd1nWzAOxSDPgVsmerOBYfNqltV9/hWCqBywINIR+5dIg6JTJ72pcEpEjcYgXkE2YEFXV1JHnsKgbLWNlhScqb2UmyRkQyytRLtL+38TGxkxCflmO+5Z8CSSNY7GidjMIZ7Q4zMjA2n1nGrlTDkzwDCsw+wqFPGQA179cnfGWOWRVruj16z6XyvxvjJwbz0wQZ75XK5tKSb7FNyeIEs4TT4jk+S4dhPeAUC5y+bDYirYgM4GC7uEnztnZyaVWQ7B381AK4Qdrwt51ZqExKbQpTUNn+EjqoTwvqNj4kqx5QUCI0ThS/YkOxJCXmPUWZbhjpCg56i+2aB6CmK2JGhn57K5mj0MNdBXA4/WnwH6XoPWJzK5Nyu2zB3nAZp+S5hpQs+p1vN1/wsjk=" >> ./data/scb/.ssh/known_hosts
   
-  # Try to create a temporary branch and push
   rm -rf ./data/scb/test
-  mkdir -p ./data/scb/test
-  cd ./data/scb/test
-  git init >/dev/null 2>&1
-  touch test >/dev/null 2>&1
-  git add test   >/dev/null 2>&1
-  git commit -am "test"  >/dev/null 2>&1
-  # Try to push the temporary branch
+  cd ./data/scb
   while true; do
-    GIT_SSH_COMMAND="ssh -o UserKnownHostsFile=../.ssh/known_hosts -o IdentitiesOnly=yes -i ../.ssh/id_rsa" git push -f $SCB_REPO master >/dev/null 2>&1
-    # Check if the push succeeded
+    echo -e "Performing test. Please wait..."
+    # Test read
+    GIT_SSH_COMMAND="ssh -o UserKnownHostsFile=.ssh/known_hosts -o IdentitiesOnly=yes -i .ssh/id_rsa" git clone $SCB_REPO test #>/dev/null 2>&1
     if [ $? -ne 0 ]; then
-      echo -e "${RED}${BOLD}Test failed!${NB}${NC}"
-      echo -e "You do not have permission to push to ${UNDERLINE}$SCB_REPO${NC}"
+      echo -e "${RED}${BOLD}Read rest failed!${NB}${NC}"
+      echo -e "You do not have permission to read to ${UNDERLINE}$SCB_REPO${NC}"
       echo -e "Please follow the above steps again and press ENTER to try again or CRTL-C to exit the setup."
       read -n 1 -s -r
-      echo -e "Performing test. Please wait..."
     else
-      # Cleanup
-      rm test
-      git commit -am "Test successful"  >/dev/null 2>&1
-      GIT_SSH_COMMAND="ssh -o UserKnownHostsFile=../.ssh/known_hosts -o IdentitiesOnly=yes -i ../.ssh/id_rsa" git push -f $SCB_REPO master >/dev/null 2>&1
-      cd ../../../
-      rm -rf ./data/scb/test
-      echo -e ""
-      echo -e "${GREEN}${BOLD}Test performed successfully${NB}${NC}"
-      echo "Press any key to continue..."
-      read -n 1 -s -r
-      break
+      cd test
+      touch test >/dev/null 2>&1
+      git add test   >/dev/null 2>&1
+      git commit -am "Test"  >/dev/null 2>&1
+      # Test write
+      GIT_SSH_COMMAND="ssh -o UserKnownHostsFile=../.ssh/known_hosts -o IdentitiesOnly=yes -i ../.ssh/id_rsa" git push $SCB_REPO master #>/dev/null 2>&1
+      if [ $? -ne 0 ]; then
+        cd ..
+        rm -rf test
+        echo -e "${RED}${BOLD}Write test failed!${NB}${NC}"
+        echo -e "You do not have permission to write to ${UNDERLINE}$SCB_REPO${NC}"
+        echo -e "Please follow the above steps again and press ENTER to try again or CRTL-C to exit the setup."
+        read -n 1 -s -r
+      else
+        # Cleanup
+        rm test
+        git commit -am "Test successful"  >/dev/null 2>&1
+        GIT_SSH_COMMAND="ssh -o UserKnownHostsFile=../.ssh/known_hosts -o IdentitiesOnly=yes -i ../.ssh/id_rsa" git push $SCB_REPO master #>/dev/null 2>&1
+        cd ../../../
+        rm -rf ./data/scb/test
+        echo -e ""
+        echo -e "${GREEN}${BOLD}Test performed successfully${NB}${NC}"
+        echo "Press any key to continue..."
+        read -n 1 -s -r
+        break
+      fi
     fi
   done
 }
@@ -233,12 +241,40 @@ enable_btcpay() {
 }
 
 function check_lnd(){
-  if [ ! -f "./data/lnd/password.txt" ]; then
-    echo "moneyprintergobrrr" > ./data/lnd/password.txt
+  if is_lnd_initialized; then
+    if [ ! -f "./data/lnd/password.txt" ]; then
+      print_header $1 "${BOLD}Insert your LND wallet password${NB}"
+      echo -e "Please insert your password for automatically unlock your LND wallet. If you come from Umbrel please insert 'moneyprintergobrrr'"
+      read -s -p "Please insert your password: " LND_PASSWORD
+      echo -e ""
+      echo $LND_PASSWORD > ./data/lnd/password.txt
+      $compose_command restart awning_lnd_1 
+    fi
+  else
+    print_header $1 "${BOLD}Create your LND wallet password${NB}"
+    echo -e "Please choose your password for automatically unlock your LND wallet."
+    echo -e "You will need to re-enter the password 3 times on the next step."
+    echo -e ""
+    while true; do
+      read -s -p "Enter your wallet password (first time of three): " password
+      echo -e ""
+      if [ ! ${#password} -ge 8 ]; then
+        echo "password must have at least 8 characters"
+        echo -e ""
+      else
+        break
+      fi
+    done
+    echo $password > ./data/lnd/password.txt
+    $docker_command exec -it awning_lnd_1 lncli create
   fi
 }
 
+
 function create_env_file() {
+  BITCOIN_VERSIONS=($(get_latest_versions "bitcoin/bitcoin"))
+  LND_VERSIONS=($(get_latest_versions "lightningnetwork/lnd"))
+  ELECTRS_VERSIONS=($(get_latest_versions "romanz/electrs"))
   cat <<EOT > .env
 UID=${MYUID}
 GID=${MYGID}
@@ -286,15 +322,6 @@ compose_build() {
   read -n 1 -s -r
 }
 
-compose_up() {
-  print_header $1 "Start the node!"
-  echo -e "You are now ready to start your node :-)"
-  echo -e ""
-  echo "Press any key to continue..."
-  read -n 1 -s -r
-  clear
-  $compose_command up -d
-}
 
 # Function to update UID and GID in .env file
 update_env_file() {
@@ -311,7 +338,6 @@ display_menu() {
   local electrs_versions=("${!3}")
 
   while true; do
-    clear
     echo "#############################################"
     echo "#               Menu                        #"
     echo "#############################################"
@@ -435,11 +461,11 @@ if [ ! -f .env ]; then
   upload_scb_repo_deploy_key "2/6"
   choose_rtl_password "3/6"
   enable_btcpay "4/6"
-  check_lnd
   create_env_file
   create_compose
   compose_build "5/6"
-  compose_up "6/6"
+  $compose_command up -d
+  check_lnd "6/6"
   display_menu
 else
   display_menu
