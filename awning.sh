@@ -443,7 +443,13 @@ display_menu() {
           echo -e "${RED}Node is not running!${NC}"
         else
           URI=`cat ./data/tor/hidden_service_lnd_rest/hostname` && $docker_command exec awning_lnd_1 lndconnect --host $URI --port 8080
+          echo ""
+          echo "Press any key to get a code you can copy paste into the app"
+          read -n 1 -s -r
+          echo ""
+          URI=`cat ./data/tor/hidden_service_lnd_rest/hostname` && $docker_command exec awning_lnd_1 lndconnect -j  --host $URI --port 8080
         fi
+        echo ""
         echo "Press any key to continue..."
         read -n 1 -s -r
         ;;
