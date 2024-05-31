@@ -403,19 +403,21 @@ display_menu() {
         fi
         ;;
       4)
-        change_version "BITCOIN_CORE_VERSION" "bitcoin/bitcoin"
-        $compose_command build bitcoin
-        if [ $(are_services_up) -ne 1 ]; then
-          $compose_command down
-          $compose_command up -d
+        if change_version "BITCOIN_CORE_VERSION" "bitcoin/bitcoin"; then
+          $compose_command build bitcoin
+          if [ $(are_services_up) -ne 1 ]; then
+            $compose_command down
+            $compose_command up -d
+          fi
         fi
         ;;
       5)
-        change_version "LND_VERSION" "lightningnetwork/lnd"
-        $compose_command build lnd
-        if [ $(are_services_up) -ne 1 ]; then
-          $compose_command down
-          $compose_command up -d
+        if change_version "LND_VERSION" "lightningnetwork/lnd" ; thens
+          $compose_command build lnd
+          if [ $(are_services_up) -ne 1 ]; then
+            $compose_command down
+            $compose_command up -d
+          fi
         fi
         ;;
       6)
@@ -578,8 +580,10 @@ change_version() {
     local new_version=$(echo ${versions[$((version_index-1))]} | sed 's/^v//')
     sed -i "s/^$1=.*/$1=$new_version/" .env
     echo -e "${GREEN}$version_name updated.${NC}"
+    return 0
   else
     echo -e "${GREEN}$version_name unchanged.${NC}"
+    return 1
   fi
 }
 
