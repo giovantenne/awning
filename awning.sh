@@ -307,6 +307,7 @@ EOT
 }
 
 function create_compose() {
+RUN_BTCPAY=yes
   cat <<EOT > docker-compose.yml
 version: "3"
 services:
@@ -319,10 +320,10 @@ EOT
   cat ./fragments/rtl.yml >> docker-compose.yml
   cat ./fragments/nginx.yml >> docker-compose.yml
   if [ "$RUN_BTCPAY" = "yes" ]; then
-      # sed -i 's/^# - "8083:8083"/- "8083:8083"/' docker-compose.yml
-      # sed -i 's/^# - "8084:8084"/- "8084:8084"/' docker-compose.yml
-      # sed -i '/depends_on: \[rtl, electrs\]/c\    depends_on: [rtl, electrs, btcpay]' docker-compose.yml
-      cat ./fragments/btcpay.yml >> docker-compose.yml
+    sed -i '/^  nginx:/,/depends_on:/s/^ *depends_on: \[rtl, electrs\]/    depends_on: [rtl, electrs, btcpay]/' docker-compose.yml
+    sed -i '/nginx:/,/restart: unless-stopped/{s/^      #\s*/      /}' docker-compose.yml
+    sed -i 's/nginx-reverse-proxy/nginx-reverse-proxy-btcpay/g' docker-compose.yml
+    cat ./fragments/btcpay.yml >> docker-compose.yml
   fi
 
 }
@@ -633,6 +634,9 @@ if [ "$compose_command" == "None" ]; then
   exit 1
 fi
 docker_command=$(check_docker)
+
+create_compose
+exit 1
 
 if [ ! -f .env ]; then
   setup_tutorial

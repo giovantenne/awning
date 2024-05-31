@@ -1,6 +1,5 @@
   nginx:
     depends_on: [rtl, electrs]
-    # depends_on: [rtl, electrs, btcpay]
     build:
       context: ./dockerfiles/
       dockerfile: Dockerfile.nginx
