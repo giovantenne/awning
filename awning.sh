@@ -101,6 +101,15 @@ show_welcome() {
   read -n 1 -s -r
 }
 
+choose_alias() {
+  print_header $1 "LND node alias"
+  echo -e "Choose the alias your LND node will use, which can be up to 32 UTF-8 characters in length."
+  echo -e ""
+  echo -n "Insert alias (default is 'AwningNode'): "
+  read NODE_ALIAS
+  NODE_ALIAS=${NODE_ALIAS:-AwningNode}
+}
+
 insert_scb_repo() {
   print_header $1 "LND channel backups"
   echo -e "The Static Channels Backup (SCB) is a feature of ${LIGHT_BLUE}LND${NC} that allows for the on-chain recovery of lightning channel balances in the case of a bricked node. Despite its name, it does not allow the recovery of your LN channels but increases the chance that you'll recover all (or most) of your off-chain (local) balances."
@@ -244,7 +253,7 @@ enable_btcpay() {
 }
 
 function check_lnd(){
-  while [ "$(docker inspect -f '{{.State.Running}}' awning_lnd_1 2>/dev/null)" != "true" ]; do
+  while [ "$($docker_command inspect -f '{{.State.Running}}' awning_lnd_1 2>/dev/null)" != "true" ]; do
     echo -e "Waiting for LND container to start..."
     sleep 10
     echo "Timed out waiting for the container to start."
@@ -292,6 +301,7 @@ function create_env_file() {
   cat <<EOT > .env
 UID=${MYUID}
 GID=${MYGID}
+NODE_ALIAS=${NODE_ALIAS}
 BITCOIN_ARCH=${BITCOIN_ARCH}
 LND_ARCH=${LND_ARCH}
 RTL_PASSWORD=${RTL_PASSWORD}
@@ -522,7 +532,8 @@ restart_submenu() {
         if [ $(are_services_up) -ne 0 ]; then
           echo -e "${RED}Node is not running!${NC}"
         else
-          $compose_command restart
+          $compose_command down
+          $compose_command up -d
         fi
         ;;
       2)
@@ -629,15 +640,19 @@ check_root_needed() {
 
 setup_tutorial(){
   show_welcome
-  insert_scb_repo "1/6"
-  upload_scb_repo_deploy_key "2/6"
-  choose_rtl_password "3/6"
-  enable_btcpay "4/6"
+  choose_alias "1/7"
+  insert_scb_repo "2/7"
+  upload_scb_repo_deploy_key "3/7"
+  choose_rtl_password "4/7"
+  enable_btcpay "5/7"
   create_env_file
   create_compose
-  compose_build "5/6"
+  compose_build "6/7"
+  if [ $(are_services_up) -ne 0 ]; then
+    $compose_command down
+  fi
   $compose_command up -d
-  check_lnd "6/6"
+  check_lnd "6/7"
   display_menu
 }
 

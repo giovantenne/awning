@@ -11,6 +11,8 @@
         GID: ${GID}
     ports:
       - "8080:8080"
+    environment:
+      NODE_ALIAS: ${NODE_ALIAS}
     volumes:
       - ./data/lnd:/data/.lnd
       - ./data/tor:/var/lib/tor:ro
