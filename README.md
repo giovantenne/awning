@@ -4,7 +4,7 @@ Something like [Umbrel](https://umbrel.com) but lighter and portable.
 Something like [RaspiBolt](https://raspibolt.org/) but easier and automated. Bitcoin/Lightning-Network oriented with no frills.
 
 **Awning** doesn't install anything on your PC, making it lightweight, customizable and portable.
-It is a plain/vanilla Docker setup. **No script is ever run in your host.**
+It is a plain/vanilla Docker setup.
 
 ### Run your BTC/LN node in 6 steps:
 

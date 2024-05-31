@@ -1,4 +1,5 @@
 #!/bin/bash
+AWN_VERSION='v0.2'
 
 RED='\033[0;31m'
 ORANGE='\033[38;5;214m'
@@ -253,6 +254,20 @@ function check_lnd(){
       $compose_command restart awning_lnd_1 
     fi
   else
+    touch ./data/lnd/password.txt
+    # Wait for the container to be running
+    local timeout=60
+    local wait_interval=2
+    elapsed=0
+    while [ "$(docker inspect -f '{{.State.Running}}' awning_lnd_1 2>/dev/null)" != "true" ]; do
+      echo -e "Waiting for LND container to start..."
+      sleep $wait_interval
+      elapsed=$((elapsed + wait_interval))
+      if [ $elapsed -ge $timeout ]; then
+        echo "Timed out waiting for the container to start."
+        exit 1
+      fi
+    done
     print_header $1 "${BOLD}Create your LND wallet password${NB}"
     echo -e "Please choose your password for automatically unlock your LND wallet."
     echo -e "You will need to re-enter the password 3 times on the next step."
@@ -333,6 +348,11 @@ update_env_file() {
   sed -i "s/^GID=.*/GID=${mygid}/" .env
 }
 
+are_services_up() {
+  $compose_command -f docker-compose.yml ps | grep ' Up ' > /dev/null
+  echo $?
+
+}
 # Function to display menu
 display_menu() {
   local bitcoin_versions=("${!1}")
@@ -340,14 +360,19 @@ display_menu() {
   local electrs_versions=("${!3}")
 
   while true; do
+    echo ""
     echo "#############################################"
-    echo "#               Menu                        #"
+    echo -e "#               ${ORANGE}AWNING Menu${NC}                 #"
     echo "#############################################"
-    echo "1) Start the node"
-    echo "2) Change RTL_PASSWORD"
-    echo "3) Change BITCOIN_CORE_VERSION"
+    if [ $(are_services_up) -ne 0 ]; then
+      echo "1) Start the node"
+    else
+      echo "1) Stop the node"
+    fi
+    echo "2) Check the logs (CRTL+C to exit)"
+    echo "3) Change the RTL password"
     echo "4) Change LND_VERSION"
-    echo "5) Change ELECTRS_VERSION"
+    echo "5) Restart"
     echo "6) Exit"
     echo "#############################################"
     echo ""
@@ -356,17 +381,30 @@ display_menu() {
 
     case $option in
       1)
-        echo "Starting the node..."
-        # Add node start logic here
+        if [ $(are_services_up) -ne 0 ]; then
+          echo "Starting the node..."
+          $compose_command up -d
+        else
+          echo "Stopping the node..."
+          $compose_command down
+        fi
         ;;
       2)
-        change_rtl_password
+        if [ $(are_services_up) -ne 0 ]; then
+          echo -e "${RED}Node is not running!${NC}"
+        else
+          logs_submenu
+        fi
+        ;;
+
+      5)
+        restart_submenu
         ;;
       3)
-        change_version "BITCOIN_CORE_VERSION" bitcoin_versions[@]
-        ;;
-      4)
-        change_version "LND_VERSION" lnd_versions[@]
+        change_rtl_password
+        if [ $(are_services_up) -ne 1 ]; then
+          $compose_command restart rtl
+        fi
         ;;
       5)
         change_version "ELECTRS_VERSION" electrs_versions[@]
@@ -376,7 +414,93 @@ display_menu() {
         exit 0
         ;;
       *)
-        echo "Invalid option. Please try again."
+        echo -e "${RED}Invalid option. Please try again.${NC}"
+        ;;
+    esac
+  done
+}
+
+logs_submenu(){
+  while true; do
+    echo "#############################################"
+    echo -e "#           Logs (CRTL+C to exit)          #"
+    echo "#############################################"
+    echo "1) All the logs"
+    echo "2) Bitcoin logs"
+    echo "3) LND logs"
+    echo "4) Electrs logs"
+    echo "5) <-- Back to main menu"
+    echo "#############################################"
+    echo ""
+    echo -n "Choose an option: "
+    read option
+    case $option in
+      1)
+        $compose_command logs -f 
+        ;;
+      2)
+        $compose_command logs -f bitcoin
+        ;;
+      3)
+        $compose_command logs -f lnd
+        ;;
+      4)
+        $compose_command logs -f electrs
+        ;;
+      5)
+        display_menu
+        ;;
+      *)
+        echo -e "${RED}Invalid option. Please try again.${NC}"
+        ;;
+    esac
+  done
+}
+
+restart_submenu() {
+  while true; do
+    echo "#############################################"
+    echo "#                   Restart                 #"
+    echo "#############################################"
+    echo "1) Restart the Awning node"
+    echo "2) Restart Bitcoin"
+    echo "3) Restart LND"
+    echo "4) Rebuild the node images"
+    echo "5) Rebuild the node images without cache (can take up to one hour)"
+    echo "6) <-- Back to main menu"
+    echo "#############################################"
+    echo ""
+    echo -n "Choose an option: "
+    read option
+    case $option in
+      1)
+        $compose_command restart
+        ;;
+      2)
+        $compose_command restart bitcoin
+        ;;
+      3)
+        $compose_command restart lnd
+        ;;
+      4)
+        $compose_command build
+        if [ $(are_services_up) -ne 1 ]; then
+          $compose_command down
+          $compose_command up -d
+        fi
+        ;;
+      5)
+        $compose_command build --no-cache
+        if [ $(are_services_up) -ne 1 ]; then
+          $compose_command down
+          $compose_command up -d
+        fi
+        ;;
+      6)
+        display_menu
+        ;;
+      *)
+        echo -e "${RED}Invalid option. Please try again.${NC}"
         ;;
     esac
   done
@@ -384,13 +508,13 @@ display_menu() {
 
 # Function to change RTL_PASSWORD
 change_rtl_password() {
-  echo -n "Enter new RTL_PASSWORD (press ENTER to keep current): "
+  echo -n "Enter new RTL password (press ENTER to keep current): "
   read new_rtl_password
   if [ ! -z "$new_rtl_password" ]; then
     sed -i "s/^RTL_PASSWORD=.*/RTL_PASSWORD=${new_rtl_password}/" .env
-    echo "RTL_PASSWORD updated."
+    echo -e "${GREEN}RTL password updated.${NC}"
   else
-    echo "RTL_PASSWORD unchanged."
+    echo -e "${GREEN}RTL password unchanged.${NC}"
   fi
 }
 
@@ -457,7 +581,7 @@ if [ "$compose_command" == "None" ]; then
 fi
 docker_command=$(check_docker)
 
-# if [ ! -f .env ]; then
+if [ ! -f .env ]; then
   show_welcome
   insert_scb_repo "1/6"
   upload_scb_repo_deploy_key "2/6"
@@ -469,7 +593,7 @@ docker_command=$(check_docker)
   $compose_command up -d
   check_lnd "6/6"
   display_menu
-# else
-#   display_menu
-# fi
+else
+  display_menu
+fi
 
