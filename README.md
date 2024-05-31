@@ -89,6 +89,7 @@ $ cp .env.sample .env
 | --- | --- |
 | `UID` | The uid (user id) of your current user. Use this command to retrieve it: `id -u`. |
 | `GID` | The gid (group id) of your current user. Use this command to retrieve it: `id -g`. |
+| `NODE_ALIAS` | The alias your LND node will use |
 | `BITCOIN_ARCH` | Here you need to choose your computer CPU architecture. Write `aarch64` for ARM (Raspberry Pi, etc) or `x86_64` for Intel or AMD. |
 | `LND_ARCH` | Write `arm64` for ARM (Raspberry Pi, etc) or `amd64` for Intel or AMD. |
 | `RTL_PASSWORD` | Choose the password for accessing the *"Ride The Lightning"* web interface. You can change it any time but don't forget to restart the RTL container afterwards with `docker-compose restart rtl`. |
