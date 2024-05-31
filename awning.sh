@@ -246,13 +246,10 @@ enable_btcpay() {
 function check_lnd(){
   while [ "$(docker inspect -f '{{.State.Running}}' awning_lnd_1 2>/dev/null)" != "true" ]; do
     echo -e "Waiting for LND container to start..."
-    sleep $wait_interval
-    elapsed=$((elapsed + wait_interval))
-    if [ $elapsed -ge $timeout ]; then
-      echo "Timed out waiting for the container to start."
-      exit 1
-    fi
+    sleep 10
+    echo "Timed out waiting for the container to start."
   done
+
   if is_lnd_initialized; then
     if [ ! -s "./data/lnd/password.txt" ]; then
       print_header $1 "${BOLD}Insert your LND wallet password${NB}"
