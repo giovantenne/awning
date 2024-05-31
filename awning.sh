@@ -195,9 +195,10 @@ upload_scb_repo_deploy_key() {
       cd test
       touch test >/dev/null 2>&1
       git add test   >/dev/null 2>&1
+      git branch -M main
       git commit -am "Test"  >/dev/null 2>&1
       # Test write
-      GIT_SSH_COMMAND="ssh -o UserKnownHostsFile=../.ssh/known_hosts -o IdentitiesOnly=yes -i ../.ssh/id_rsa" git push $SCB_REPO master #>/dev/null 2>&1
+      GIT_SSH_COMMAND="ssh -o UserKnownHostsFile=../.ssh/known_hosts -o IdentitiesOnly=yes -i ../.ssh/id_rsa" git push $SCB_REPO main #>/dev/null 2>&1
       if [ $? -ne 0 ]; then
         cd ..
         rm -rf test
@@ -209,7 +210,7 @@ upload_scb_repo_deploy_key() {
         # Cleanup
         rm test
         git commit -am "Test successful"  >/dev/null 2>&1
-        GIT_SSH_COMMAND="ssh -o UserKnownHostsFile=../.ssh/known_hosts -o IdentitiesOnly=yes -i ../.ssh/id_rsa" git push $SCB_REPO master #>/dev/null 2>&1
+        GIT_SSH_COMMAND="ssh -o UserKnownHostsFile=../.ssh/known_hosts -o IdentitiesOnly=yes -i ../.ssh/id_rsa" git push $SCB_REPO main #>/dev/null 2>&1
         cd ../../../
         rm -rf ./data/scb/test
         echo -e ""
