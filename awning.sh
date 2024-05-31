@@ -355,10 +355,6 @@ are_services_up() {
 }
 # Function to display menu
 display_menu() {
-  local bitcoin_versions=("${!1}")
-  local lnd_versions=("${!2}")
-  local electrs_versions=("${!3}")
-
   while true; do
     echo ""
     echo "#############################################"
@@ -371,9 +367,12 @@ display_menu() {
     fi
     echo "2) Check the logs (CRTL+C to exit)"
     echo "3) Change the RTL password"
-    echo "4) Change LND_VERSION"
-    echo "5) Restart"
-    echo "6) Exit"
+    echo "4) Change Bitcoin version"
+    echo "5) Change LND version"
+    echo "6) Display Electrs TOR address"
+    echo "7) Display connection URL for Zeus Wallet"
+    echo "8) Restart"
+    echo "0) Exit"
     echo "#############################################"
     echo ""
     echo -n "Choose an option: "
@@ -397,19 +396,44 @@ display_menu() {
         fi
         ;;
 
-      5)
-        restart_submenu
-        ;;
       3)
         change_rtl_password
         if [ $(are_services_up) -ne 1 ]; then
           $compose_command restart rtl
         fi
         ;;
+      4)
+        change_version "BITCOIN_CORE_VERSION" "bitcoin/bitcoin"
+        $compose_command build bitcoin
+        if [ $(are_services_up) -ne 1 ]; then
+          $compose_command down
+          $compose_command up -d
+        fi
+        ;;
       5)
-        change_version "ELECTRS_VERSION" electrs_versions[@]
+        change_version "LND_VERSION" "lightningnetwork/lnd"
+        $compose_command build lnd
+        if [ $(are_services_up) -ne 1 ]; then
+          $compose_command down
+          $compose_command up -d
+        fi
         ;;
       6)
+        echo -e "${GREEN}${UNDERLINE}`cat ./data/tor/hidden_service_electrs/hostname`:50001${NC}${NC}"
+        ;;
+      7)
+        if [ $(are_services_up) -ne 0 ]; then
+          echo -e "${RED}Node is not running!${NC}"
+        else
+          URI=`cat ./data/tor/hidden_service_lnd_rest/hostname` && $docker_command exec awning_lnd_1 lndconnect --host $URI --port 8080
+        fi
+        echo "Press any key to continue..."
+        read -n 1 -s -r
+        ;;
+      8)
+        restart_submenu
+        ;;
+      0)
         echo "Exiting."
         exit 0
         ;;
@@ -429,7 +453,7 @@ logs_submenu(){
     echo "2) Bitcoin logs"
     echo "3) LND logs"
     echo "4) Electrs logs"
-    echo "5) <-- Back to main menu"
+    echo "0) <-- Back to main menu"
     echo "#############################################"
     echo ""
     echo -n "Choose an option: "
@@ -447,7 +471,7 @@ logs_submenu(){
       4)
         $compose_command logs -f electrs
         ;;
-      5)
+      0)
         display_menu
         ;;
       *)
@@ -460,21 +484,26 @@ logs_submenu(){
 restart_submenu() {
   while true; do
     echo "#############################################"
-    echo "#                   Restart                 #"
+    echo "#                Restart                    #"
     echo "#############################################"
     echo "1) Restart the Awning node"
     echo "2) Restart Bitcoin"
     echo "3) Restart LND"
     echo "4) Rebuild the node images"
     echo "5) Rebuild the node images without cache (can take up to one hour)"
-    echo "6) <-- Back to main menu"
+    echo "6) Restart the SETUP tutorial"
+    echo "0) <-- Back to main menu"
     echo "#############################################"
     echo ""
     echo -n "Choose an option: "
     read option
     case $option in
       1)
-        $compose_command restart
+        if [ $(are_services_up) -ne 0 ]; then
+          echo -e "${RED}Node is not running!${NC}"
+        else
+          $compose_command restart
+        fi
         ;;
       2)
         $compose_command restart bitcoin
@@ -497,6 +526,9 @@ restart_submenu() {
         fi
         ;;
       6)
+        setup_tutorial
+        ;;
+      0)
         display_menu
         ;;
       *)
@@ -520,20 +552,20 @@ change_rtl_password() {
 
 # Function to change version
 change_version() {
-  local version_name=$1
-  local versions=("${!2}")
-
+  local versions=$2
+  versions=($(get_latest_versions $2))
   echo "Select $version_name:"
   for i in "${!versions[@]}"; do
     echo "$((i+1))) ${versions[$i]}"
   done
-  echo -n "Choose a version (press ENTER to keep current): "
+  echo -n "Choose a version (press ENTER to keep current v`grep '^'$1 .env | cut -d '=' -f 2`): "
   read version_index
   if [ ! -z "$version_index" ] && [ "$version_index" -le "${#versions[@]}" ]; then
-    sed -i "s/^${version_name}=.*/${version_name}=${versions[$((version_index-1))]}/" .env
-    echo "$version_name updated."
+    local new_version=$(echo ${versions[$((version_index-1))]} | sed 's/^v//')
+    sed -i "s/^$1=.*/$1=$new_version/" .env
+    echo -e "${GREEN}$version_name updated.${NC}"
   else
-    echo "$version_name unchanged."
+    echo -e "${GREEN}$version_name unchanged.${NC}"
   fi
 }
 
@@ -573,15 +605,7 @@ check_root_needed() {
   fi
 }
 
-# Check if docker-compose or docker compose is available
-compose_command=$(check_docker_compose)
-if [ "$compose_command" == "None" ]; then
-  echo "Neither docker-compose nor docker compose is installed. Please install one of them."
-  exit 1
-fi
-docker_command=$(check_docker)
-
-if [ ! -f .env ]; then
+setup_tutorial(){
   show_welcome
   insert_scb_repo "1/6"
   upload_scb_repo_deploy_key "2/6"
@@ -593,6 +617,18 @@ if [ ! -f .env ]; then
   $compose_command up -d
   check_lnd "6/6"
   display_menu
+}
+
+# Check if docker-compose or docker compose is available
+compose_command=$(check_docker_compose)
+if [ "$compose_command" == "None" ]; then
+  echo "Neither docker-compose nor docker compose is installed. Please install one of them."
+  exit 1
+fi
+docker_command=$(check_docker)
+
+if [ ! -f .env ]; then
+  setup_tutorial
 else
   display_menu
 fi
