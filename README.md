@@ -6,7 +6,38 @@ Something like [RaspiBolt](https://raspibolt.org/) but easier and automated. Bit
 **Awning** doesn't install anything on your PC, making it lightweight, customizable and portable.
 It is a plain/vanilla Docker setup.
 
-### Run your BTC/LN node in 6 steps:
+# Prerequisites
+- git
+- docker
+- docker-compose (or [`docker compose plugin`](https://docs.docker.com/compose/install/linux/))
+
+```sh
+$ sudo apt-get install -y docker.io docker-compose git
+```
+
+
+# Run your BTC/LN/BTCPay node (the easy way):
+
+1. [Clone this repository](#1)
+2. [Run the awning.sh utility script](#2)
+
+Clone or download this repository and enter the project directory.
+```sh
+$ git clone https://github.com/giovantenne/awning.git
+$ cd awning
+$ ./awning.sh
+```
+You can run the `./awning.sh` utility script every time you want to interact with your node.
+
+
+# ... or manually setup your node instead:
+If you want to have full control you can manually setup your node in 6 steps.
+
+Please follow [this guide](https://docs.docker.com/engine/install/linux-postinstall/) if you don't want to preface the `docker` and the `docker-compose` commands with `sudo`.
+In this guide  `sudo` will be always omitted.
+All the commands need to be run on the **Awning** root directory.
+
+Here is the steps:
 
 1. [Clone this repository](#1)
 2. [Create a Github repository for storing the LND Static Channel Backups (SCB)](#2)
@@ -17,18 +48,7 @@ It is a plain/vanilla Docker setup.
 
 You can also [add your BTCPay Server](#7) eventually.
 
-# Prerequisites
-- git
-- docker
-- docker-compose (or [`docker compose plugin`](https://docs.docker.com/compose/install/linux/))
 
-```sh
-$ sudo apt-get install -y docker.io docker-compose git
-```
-Please follow [this guide](https://docs.docker.com/engine/install/linux-postinstall/) if you don't want to preface the `docker` and the `docker-compose` commands with `sudo`.
-In this guide  `sudo` will be always omitted.
-
-All the commands need to be run on the **Awning** root directory.
 
 <a name="1"></a>
 # Before you begin
@@ -78,6 +98,13 @@ $ cp .env.sample .env
 
 <a name="4"></a>
 # How to begin
+The `docker-compose.yml` file contains theme **Awning** docker services that your node will run. 
+
+Since you are not using the `./awning.sh` utility script, just make a copy of the sample file.
+```sh
+$ cp docker-compose.yml.sample docker-compose.yml
+```
+
 
 Run the following command:
 ```sh
@@ -195,6 +222,7 @@ $ URI=`cat ./data/tor/hidden_service_lnd_rest/hostname` && docker exec lnd lndco
 
 # Directories structure
 ```sh
+├── awning.sh
 ├── configs
 │   ├── bitcoin.conf
 │   ├── electrs.toml
@@ -212,8 +240,8 @@ $ URI=`cat ./data/tor/hidden_service_lnd_rest/hostname` && docker exec lnd lndco
 │   ├── rtl
 │   ├── scb
 │   └── tor
-├── docker-compose.yml
-├── Dockerfiles
+├── docker-compose.yml.sample
+├── dockerfiles
 │   ├── Dockerfile.bitcoin
 │   ├── Dockerfile.electrs
 │   ├── Dockerfile.lnd
@@ -227,8 +255,19 @@ $ URI=`cat ./data/tor/hidden_service_lnd_rest/hostname` && docker exec lnd lndco
 │   │   └── scb.sh
 │   └── files
 │       └── nginx.conf
+├── env.sample
+├── fragments
+│   ├── bitcoin.yml
+│   ├── btcpay.yml
+│   ├── electrs.yml
+│   ├── lnd.yml
+│   ├── nginx.yml
+│   ├── rtl.yml
+│   ├── scb.yml
+│   └── tor.yml
 ├── LICENSE
 └── README.md
+
 
 ```
 
@@ -236,7 +275,9 @@ $ URI=`cat ./data/tor/hidden_service_lnd_rest/hostname` && docker exec lnd lndco
 | --- | --- |
 | `configs` | Here you can find all the configuration files. Feel free to edit them as you like, but please be carefull to not mess-up with authentication method: **Awning** currently uses cookies authentication between services instead of RPC. |
 | `data` | Here is where the data are persisted. The Bitcoin Blockchain, the Electrs indexes, the LND channels, etc. are all stored here. |
-| `Dockerfiles` | Here you can find and inspect all the files used to build the images. **Don't trust, verify**! |
+| `dockerfiles` | Here you can find and inspect all the files used to build the images. **Don't trust, verify**! |
+| `fragments` | All the services that can be added to the `docker-compose.yml` during the setup tutorial with the `awning.sh` utility script |
+
 
 <a name="7"></a>
 # BTCPay Server (optional)
