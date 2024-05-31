@@ -412,7 +412,7 @@ display_menu() {
         fi
         ;;
       5)
-        if change_version "LND_VERSION" "lightningnetwork/lnd" ; thens
+        if change_version "LND_VERSION" "lightningnetwork/lnd" ; then
           $compose_command build lnd
           if [ $(are_services_up) -ne 1 ]; then
             $compose_command down
@@ -444,10 +444,17 @@ display_menu() {
         restart_submenu
         ;;
       9)
-         $compose_command down
-         git stash
-         git pull
-         git stash apply
+        read -p "Do you want to proceed? (y/n): " answer
+        if [[ $answer =~ ^[Yy]$ ]]; then
+          $compose_command down
+          git stash
+          git pull
+          git stash apply
+        elif [[ $answer =~ ^[Nn]$ ]]; then
+          display_menu
+        else
+          echo "Invalid input."
+        fi
         ;;
       0)
         echo "Exiting."
