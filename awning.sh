@@ -403,7 +403,7 @@ display_menu() {
         fi
         ;;
       4)
-        if change_version "BITCOIN_CORE_VERSION" "bitcoin/bitcoin"; then
+        if (change_version "BITCOIN_CORE_VERSION" "bitcoin/bitcoin"); then
           $compose_command build bitcoin
           if [ $(are_services_up) -ne 1 ]; then
             $compose_command down
@@ -412,7 +412,7 @@ display_menu() {
         fi
         ;;
       5)
-        if change_version "LND_VERSION" "lightningnetwork/lnd" ; then
+        if (change_version "LND_VERSION" "lightningnetwork/lnd") ; then
           $compose_command build lnd
           if [ $(are_services_up) -ne 1 ]; then
             $compose_command down
