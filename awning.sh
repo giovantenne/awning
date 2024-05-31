@@ -641,9 +641,9 @@ if [ "$compose_command" == "None" ]; then
 fi
 docker_command=$(check_docker)
 
-if [ ! -f .env ]; then
-  setup_tutorial
-else
+if [ -f "docker-compose.yml" ] && [ -f ".env" ]; then
   display_menu
+else
+  setup_tutorial
 fi
 
