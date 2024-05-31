@@ -55,7 +55,7 @@ is_bitcoin_blockchain_downloaded() {
 
 # Function to check if LND is initialized
 is_lnd_initialized() {
-  channel_backup_file="./data/lnd/chain/bitcoin/mainnet/channel.backup"
+  channel_backup_file="./data/lnd/data/chain/bitcoin/mainnet/channel.backup"
   if [ -f "$channel_backup_file" ]; then
     return 0
   else
