@@ -16,7 +16,7 @@ $ sudo apt-get install -y docker.io docker-compose git
 ```
 
 
-# Run your BTC/LN/BTCPay node (the easy way):
+# Run your BTC / LN / BTCPay node (the easy way):
 
 1. Clone this repository
 2. Run the awning.sh utility script
