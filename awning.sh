@@ -306,7 +306,6 @@ EOT
 }
 
 function create_compose() {
-RUN_BTCPAY=yes
   cat <<EOT > docker-compose.yml
 version: "3"
 services:
