@@ -1,5 +1,4 @@
 #!/bin/bash
-AWN_VERSION='v0.2'
 
 RED='\033[0;31m'
 ORANGE='\033[38;5;214m'
@@ -53,13 +52,14 @@ is_bitcoin_blockchain_downloaded() {
     return 1
   fi
 }
+
 # Function to check if LND is initialized
 is_lnd_initialized() {
-  local channel_backup_file="./data/lnd/chain/bitcoin/mainnet/wallet.db"
+  channel_backup_file="./data/lnd/chain/bitcoin/mainnet/channel.backup"
   if [ -f "$channel_backup_file" ]; then
-    return 1
-  else
     return 0
+  else
+    return 1
   fi
 }
 
@@ -81,17 +81,16 @@ is_ssh_github_repo() {
 }
 
 show_welcome() {
-  # print_header $1
-
   echo -e "Welcome to the ${ORANGE}${BOLD}Awning${NB}${NC} setup tutorial!"
-  echo -e ""
   echo -e "This script will guide you through setting up a full dockerized Bitcoin/LND/BTCPay server on your PC."
   if ! is_bitcoin_blockchain_downloaded; then
     echo -e "----------------"
     echo -e "It seems that you need to download the entire ${ORANGE}Bitcoin${NC} blockchain. This will take some time..."
     echo -e "If you already have the blockchain downloaded somewhere, please move it to ${UNDERLINE}./data/bitcoin/${NC} now."
   fi
+
   if ! is_lnd_initialized; then
+    touch ./data/lnd/password.txt
     echo -e "----------------"
     echo -e "It seems that you need to initialize your ${LIGHT_BLUE}LND${NC} wallet."
     echo -e "If you already have your LND data somewhere, please move it to ${UNDERLINE}./data/lnd/${NC} now."
@@ -244,30 +243,29 @@ enable_btcpay() {
 }
 
 function check_lnd(){
+  while [ "$(docker inspect -f '{{.State.Running}}' awning_lnd_1 2>/dev/null)" != "true" ]; do
+    echo -e "Waiting for LND container to start..."
+    sleep $wait_interval
+    elapsed=$((elapsed + wait_interval))
+    if [ $elapsed -ge $timeout ]; then
+      echo "Timed out waiting for the container to start."
+      exit 1
+    fi
+  done
   if is_lnd_initialized; then
-    if [ ! -f "./data/lnd/password.txt" ]; then
+    if [ ! -s "./data/lnd/password.txt" ]; then
       print_header $1 "${BOLD}Insert your LND wallet password${NB}"
       echo -e "Please insert your password for automatically unlock your LND wallet. If you come from Umbrel please insert 'moneyprintergobrrr'"
       read -s -p "Please insert your password: " LND_PASSWORD
       echo -e ""
       echo $LND_PASSWORD > ./data/lnd/password.txt
-      $compose_command restart awning_lnd_1 
+      $compose_command restart lnd
     fi
   else
-    touch ./data/lnd/password.txt
     # Wait for the container to be running
     local timeout=60
     local wait_interval=2
     elapsed=0
-    while [ "$(docker inspect -f '{{.State.Running}}' awning_lnd_1 2>/dev/null)" != "true" ]; do
-      echo -e "Waiting for LND container to start..."
-      sleep $wait_interval
-      elapsed=$((elapsed + wait_interval))
-      if [ $elapsed -ge $timeout ]; then
-        echo "Timed out waiting for the container to start."
-        exit 1
-      fi
-    done
     print_header $1 "${BOLD}Create your LND wallet password${NB}"
     echo -e "Please choose your password for automatically unlock your LND wallet."
     echo -e "You will need to re-enter the password 3 times on the next step."
@@ -350,7 +348,7 @@ update_env_file() {
 }
 
 are_services_up() {
-  $compose_command -f docker-compose.yml ps | grep ' Up ' > /dev/null
+  $compose_command ps | grep ' Up ' > /dev/null
   echo $?
 
 }
@@ -370,7 +368,7 @@ display_menu() {
     echo "3) Change the RTL password"
     echo "4) Change Bitcoin version"
     echo "5) Change LND version"
-    echo "6) Display Electrs TOR address"
+    echo "6) Display web addresses"
     echo "7) Display connection URL for Zeus Wallet"
     echo "8) Restart"
     echo "9) Update Awning"
@@ -421,7 +419,15 @@ display_menu() {
         fi
         ;;
       6)
-        echo -e "${GREEN}${UNDERLINE}`cat ./data/tor/hidden_service_electrs/hostname`:50001${NC}${NC}"
+        echo -e "ELECTRS via TOR:     ${GREEN}${UNDERLINE}`cat ./data/tor/hidden_service_electrs/hostname`:50001${NC}${NC}"
+        echo -e "Electrs (ssl):       https://localhost:50002"
+        echo -e "LND Rest API (ssl):  https://localhost:8080"
+        echo -e "RTL (ssl):           https://localhost:8081"
+        echo -e "RTL (no ssl):        http://localhost:8082"
+        echo -e "BTCPay (ssl):        https://localhost:8083"
+        echo -e "BTCPay (no ssl):     http://localhost:8084"
+        echo "Press any key to continue..."
+        read -n 1 -s -r
         ;;
       7)
         if [ $(are_services_up) -ne 0 ]; then
@@ -468,16 +474,16 @@ logs_submenu(){
     read option
     case $option in
       1)
-        $compose_command logs -f 
+        $compose_command logs --tail 100 -f 
         ;;
       2)
-        $compose_command logs -f bitcoin
+        $compose_command logs --tail 100 -f bitcoin
         ;;
       3)
-        $compose_command logs -f lnd
+        $compose_command logs --tail 100 -f lnd
         ;;
       4)
-        $compose_command logs -f electrs
+        $compose_command logs --tail 100 -f electrs
         ;;
       0)
         display_menu
@@ -634,9 +640,6 @@ if [ "$compose_command" == "None" ]; then
   exit 1
 fi
 docker_command=$(check_docker)
-
-create_compose
-exit 1
 
 if [ ! -f .env ]; then
   setup_tutorial
