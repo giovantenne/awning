@@ -37,8 +37,8 @@ LND_ARCH=${ARCH_INFO[1]}
 # Print header
 print_header() {
   echo "-----------"
-  echo -en "${BOLD}${ORANGE}$1) Awning > ${NC}${NB} "
-  echo -e "${BOLD}$2${NB}"
+  echo -e "${BOLD}${ORANGE}$1) $2${NC}${NB} "
+  # echo -e "${BOLD}$2${NB}"
   echo "-----------"
   # sleep 1
 }
@@ -83,6 +83,7 @@ show_welcome() {
   # print_header $1
 
   echo -e "Welcome to the ${ORANGE}${BOLD}Awning${NB}${NC} setup tutorial!"
+  echo -e ""
   echo -e "This script will guide you through setting up a full dockerized Bitcoin/LND/BTCPay server on your PC."
   if ! is_bitcoin_blockchain_downloaded; then
     echo -e "----------------"
@@ -91,7 +92,7 @@ show_welcome() {
   fi
   if ! is_lnd_initialized; then
     echo -e "----------------"
-    echo -e "It seems that you need to download initialize your ${LIGHT_BLUE}LND${NC} wallet."
+    echo -e "It seems that you need to initialize your ${LIGHT_BLUE}LND${NC} wallet."
     echo -e "If you already have your LND data somewhere, please move it to ${UNDERLINE}./data/lnd/${NC} now."
   fi
 
@@ -101,10 +102,10 @@ show_welcome() {
 }
 
 insert_scb_repo() {
-  print_header $1 "LND channel backups preparation"
+  print_header $1 "LND channel backups"
   echo -e "The Static Channels Backup (SCB) is a feature of ${LIGHT_BLUE}LND${NC} that allows for the on-chain recovery of lightning channel balances in the case of a bricked node. Despite its name, it does not allow the recovery of your LN channels but increases the chance that you'll recover all (or most) of your off-chain (local) balances."
   echo -e ""
-  echo -e "${ORANGE}${BOLD}Awning${NB}${NC} will automatically upload a copy of your ${UNDERLINE}channel.backup${NC} every time it changes on a Github repository you own, so you will need to create one and provide upload credential later."
+  echo -e "${BOLD}Awning${NB} will automatically upload a copy of your ${UNDERLINE}channel.backup${NC} every time it changes on a Github repository you own, so you will need to create one and provide upload credential later."
   echo -e ""
   echo -e "${BOLD}Create a GitHub repository${NB}"
   echo -e "   - Go to GitHub (${UNDERLINE}https://github.com${NC}), sign up for a new user account, or log in with an existing one."
@@ -116,8 +117,9 @@ insert_scb_repo() {
   echo -e "         It should be something like ${UNDERLINE}git@github.com:giovantenne/remote-lnd-backup.git${NC}"
 
   echo -e ""
+
   while true; do
-    echo -en "Paste here your SSH repository address: "
+    echo -en "Enter your SSH repository address: "
     read SCB_REPO
     if is_ssh_github_repo "$SCB_REPO"; then
       break
@@ -128,7 +130,7 @@ insert_scb_repo() {
 }
 
 upload_scb_repo_deploy_key() {
-  print_header $1 "Authorize SCB (Static Channel Backup) to be uploaded on Github"
+  print_header $1 "Authorize SCB to be uploaded on Github"
 
   if [ ! -f ./data/scb/.ssh/id_rsa.pub ]; then
     if check_root_needed; then
@@ -221,8 +223,8 @@ upload_scb_repo_deploy_key() {
 }
 
 choose_rtl_password() {
-  print_header $1 "${BOLD}Choose your 'Ride The Lightning' password${NB}"
-  read -s -p "Please choose your password: " RTL_PASSWORD
+  print_header $1 "${BOLD}'Ride The Lightning' password${NB}"
+  read -s -p "Please choose your password for the RTL web interface: " RTL_PASSWORD
   echo -e ""
 }
 
@@ -267,6 +269,7 @@ function check_lnd(){
     done
     echo $password > ./data/lnd/password.txt
     $docker_command exec -it awning_lnd_1 lncli create
+    echo -e ""
   fi
 }
 
@@ -300,7 +303,6 @@ EOT
   cat ./fragments/scb.yml >> docker-compose.yml
   cat ./fragments/rtl.yml >> docker-compose.yml
   cat ./fragments/nginx.yml >> docker-compose.yml
-  echo $RUN_BTCPAY
   if [ "$RUN_BTCPAY" = "yes" ]; then
       # sed -i 's/^# - "8083:8083"/- "8083:8083"/' docker-compose.yml
       # sed -i 's/^# - "8084:8084"/- "8084:8084"/' docker-compose.yml
@@ -455,7 +457,7 @@ if [ "$compose_command" == "None" ]; then
 fi
 docker_command=$(check_docker)
 
-if [ ! -f .env ]; then
+# if [ ! -f .env ]; then
   show_welcome
   insert_scb_repo "1/6"
   upload_scb_repo_deploy_key "2/6"
@@ -467,7 +469,7 @@ if [ ! -f .env ]; then
   $compose_command up -d
   check_lnd "6/6"
   display_menu
-else
-  display_menu
-fi
+# else
+#   display_menu
+# fi
 
