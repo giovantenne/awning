@@ -3,7 +3,7 @@ services:
   tor:
     user: "${UID}:${GID}"
     build:
-      context: ./Dockerfiles/
+      context: ./dockerfiles/
       dockerfile: Dockerfile.tor
       args:
         UID: ${UID}
@@ -17,7 +17,7 @@ services:
     user: "${UID}:${GID}"
     depends_on: [tor]
     build:
-      context: ./Dockerfiles/
+      context: ./dockerfiles/
       dockerfile: Dockerfile.bitcoin
       args:
         BITCOIN_ARCH: ${BITCOIN_ARCH}
@@ -34,7 +34,7 @@ services:
     user: "${UID}:${GID}"
     depends_on: [bitcoin]
     build:
-      context: ./Dockerfiles/
+      context: ./dockerfiles/
       dockerfile: Dockerfile.electrs
       args:
         ELECTRS_VERSION: ${ELECTRS_VERSION}
@@ -50,7 +50,7 @@ services:
     user: "${UID}:${GID}"
     depends_on: [bitcoin]
     build:
-      context: ./Dockerfiles/
+      context: ./dockerfiles/
       dockerfile: Dockerfile.lnd
       args:
         LND_ARCH: ${LND_ARCH}
@@ -72,7 +72,7 @@ services:
     user: "${UID}:${GID}"
     depends_on: [lnd]
     build:
-      context: ./Dockerfiles/
+      context: ./dockerfiles/
       dockerfile: Dockerfile.scb
       args:
         UID: ${UID}
@@ -88,7 +88,7 @@ services:
     user: "${UID}:${GID}"
     depends_on: [lnd]
     build:
-      context: ./Dockerfiles/
+      context: ./dockerfiles/
       dockerfile: Dockerfile.rtl
       args:
         UID: ${UID}
@@ -106,7 +106,7 @@ services:
     depends_on: [rtl, electrs]
     # depends_on: [rtl, electrs, btcpay]
     build:
-      context: ./Dockerfiles/
+      context: ./dockerfiles/
       dockerfile: Dockerfile.nginx
     ports:
       - "50002:50002" #electrs  RPC ssl
