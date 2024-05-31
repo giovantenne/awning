@@ -45,7 +45,6 @@
       NBXPLORER_BTCHASTXINDEX: 1
     restart: unless-stopped
   postgres:
-    container_name: postgres
     user: "${UID}:${GID}"
     shm_size: 256mb
     # https://github.com/btcpayserver/dockerfile-deps/tree/master/Postgres/13.13
