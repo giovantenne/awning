@@ -372,6 +372,7 @@ display_menu() {
     echo "6) Display Electrs TOR address"
     echo "7) Display connection URL for Zeus Wallet"
     echo "8) Restart"
+    echo "9) Update Awning"
     echo "0) Exit"
     echo "#############################################"
     echo ""
@@ -432,6 +433,12 @@ display_menu() {
         ;;
       8)
         restart_submenu
+        ;;
+      9)
+         $compose_command down
+         git stash
+         git pull
+         git stash apply
         ;;
       0)
         echo "Exiting."
