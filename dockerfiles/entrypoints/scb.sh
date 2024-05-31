@@ -28,6 +28,9 @@ if [ ! -d $REMOTE_BACKUP_DIR ]; then
   do
     sleep 30
   done
+else
+  cd $REMOTE_BACKUP_DIR || exit
+  git pull
 fi;
 
 # Safety bash script options
