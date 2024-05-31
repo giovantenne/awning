@@ -12,7 +12,7 @@ It is a plain/vanilla Docker setup.
 - docker-compose (or [`docker compose plugin`](https://docs.docker.com/compose/install/linux/))
 
 ```sh
-$ sudo apt-get install -y docker.io docker-compose git
+$ sudo apt-get install -y docker.io docker-compose-v2 git
 ```
 
 
