@@ -1,4 +1,5 @@
   nginx:
+    container_name: awning_nginx
     depends_on: [rtl, electrs]
     build:
       context: ./dockerfiles/
