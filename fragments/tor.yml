@@ -1,4 +1,5 @@
   tor:
+    container_name: awning_tor
     user: "${UID}:${GID}"
     build:
       context: ./dockerfiles/

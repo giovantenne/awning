@@ -1,6 +1,7 @@
 version: "3"
 services:
   tor:
+    container_name: awning_tor
     user: "${UID}:${GID}"
     build:
       context: ./dockerfiles/
@@ -14,6 +15,7 @@ services:
     restart: unless-stopped
 
   bitcoin:
+    container_name: awning_bitcoin
     user: "${UID}:${GID}"
     depends_on: [tor]
     build:
@@ -31,6 +33,7 @@ services:
     restart: unless-stopped
 
   electrs:
+    container_name: awning_electrs
     user: "${UID}:${GID}"
     depends_on: [bitcoin]
     build:
@@ -47,6 +50,7 @@ services:
     restart: unless-stopped
 
   lnd:
+    container_name: awning_lnd
     user: "${UID}:${GID}"
     depends_on: [bitcoin]
     build:
@@ -69,6 +73,7 @@ services:
     restart: unless-stopped
 
   scb:
+    container_name: awning_scb
     user: "${UID}:${GID}"
     depends_on: [lnd]
     build:
@@ -85,6 +90,7 @@ services:
     restart: unless-stopped
 
   rtl:
+    container_name: awning_rtl
     user: "${UID}:${GID}"
     depends_on: [lnd]
     build:
@@ -103,6 +109,7 @@ services:
     restart: unless-stopped
 
   nginx:
+    container_name: awning_nginx
     depends_on: [rtl, electrs]
     # depends_on: [rtl, electrs, btcpay]
     build:
@@ -120,6 +127,7 @@ services:
 
 
   # btcpay:
+  #   container_name: awning_btcpay
   #   image: btcpayserver/btcpayserver:1.13.0
   #   user: "${UID}:${GID}"
   #   depends_on: [nbx, postgres]
@@ -145,6 +153,7 @@ services:
   #     BTCPAY_EXPLORERPOSTGRES: User ID=postgres;Host=postgres;Port=5432;Application Name=nbxplorer;MaxPoolSize=20;Database=nbxplorermainnet
   #   restart: unless-stopped
   # nbx:
+  #   container_name: awning_nbx
   #   user: "${UID}:${GID}"
   #   image: nicolasdorier/nbxplorer:2.5.0@sha256:bbff2b6703ed240da263e6ba01deacf2c6520d371d6a0202e87a9e8c7f97b158
   #   depends_on: [postgres, bitcoin]
@@ -166,6 +175,7 @@ services:
   #     NBXPLORER_BTCHASTXINDEX: 1
   #   restart: unless-stopped
   # postgres:
+  #   container_name: awning_postgres
   #   user: "${UID}:${GID}"
   #   shm_size: 256mb
   #   # https://github.com/btcpayserver/dockerfile-deps/tree/master/Postgres/13.13

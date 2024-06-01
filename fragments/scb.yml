@@ -1,4 +1,5 @@
   scb:
+    container_name: awning_scb
     user: "${UID}:${GID}"
     depends_on: [lnd]
     build:

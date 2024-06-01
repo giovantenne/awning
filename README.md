@@ -153,7 +153,7 @@ Once you first start the containers there are still a couple of steps to complet
 Run this command:
 
 ```sh
-$ docker logs scb 2> /dev/null | grep -o 'ssh-rsa.*' | head -1
+$ docker logs awning_scb 2> /dev/null | grep -o 'ssh-rsa.*' | head -1
 ```
 
 * Go back to the GitHub repository webpage
@@ -168,7 +168,7 @@ $ docker logs scb 2> /dev/null | grep -o 'ssh-rsa.*' | head -1
 If you are migrating from **Umbrel** or from an existing LND node just copy your data to the `./data/lnd` directory before the `docker-compose up -d --build` command and skip the rest of this step, otherwise run this command:
 
 ```sh
-$ docker exec -it lnd lncli create
+$ docker exec -it awning_lnd lncli create
 ```
 
 Enter your password as wallet password (it must be exactly the same you stored in `.env` as [LND_PASSWORD](#3)).
@@ -206,7 +206,7 @@ Replace `localhost` with the IP of your node if you are runnin **Awning** on a d
 - Click on “SCAN LNDCONNECT CONFIG” and, if prompted, allow Zeus to use the camera
 - Scan the QR code generated with the following command. It will be a big QR code, so maximize your terminal window and use CTRL+- to shrink the code further to fit the screen
 ```sh
-$ URI=`cat ./data/tor/hidden_service_lnd_rest/hostname` && docker exec lnd lndconnect --host $URI --port 8080
+$ URI=`cat ./data/tor/hidden_service_lnd_rest/hostname` && docker exec awning_lnd lndconnect --host $URI --port 8080
 ```
 
 - Click on “SAVE NODE CONFIG”. Zeus is now connecting to your node, and it might take a while the first time.
@@ -215,8 +215,8 @@ $ URI=`cat ./data/tor/hidden_service_lnd_rest/hostname` && docker exec lnd lndco
 | Command | Description |
 | --- | --- |
 | `docker ps` |  Lists the containers that are running on your host |
-| `docker logs -f bitcoin` | Stream the logs for the *bitcoin/lnd/electrs* container |
-| `docker exec -it lnd bash` |  Connect to the *lnd* container so that you can use the `lncli` command (eg. `lncli getinfo`) |
+| `docker logs -f awning_bitcoin` | Stream the logs for the *bitcoin/lnd/electrs* container |
+| `docker exec -it awning_lnd bash` |  Connect to the *lnd* container so that you can use the `lncli` command (eg. `lncli getinfo`) |
 | `docker-compose restart bitcoin` | Restart the *bitcoin/lnd/electrs* container |
 | `docker-compose build --no-cache` | Rebuild all the containers from scratch (eg. after changing bitcoin version in `.env`)|
 | `docker-compose down` | Stop all the containers |
