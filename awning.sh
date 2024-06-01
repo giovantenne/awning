@@ -152,7 +152,7 @@ upload_scb_repo_deploy_key() {
     mkdir -p ./data/scb/.ssh
 
     # Generating ssh key
-    $sudo_cmd docker run --rm -e MYUID=$MYUID -e MYGID=$MYGID -v "./data/scb/.ssh:/keys" debian:bookworm-slim sh -c "
+    $docker_command run --rm -e MYUID=$MYUID -e MYGID=$MYGID -v "./data/scb/.ssh:/keys" debian:bookworm-slim sh -c "
     apt-get update && \
       DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends openssh-client && \
       ssh-keygen -t rsa -b 2048 -f /keys/id_rsa -N '' && \
@@ -255,7 +255,7 @@ enable_btcpay() {
 }
 
 function check_lnd(){
-  while [ "$($docker_command inspect -f '{{.State.Running}}' awning_lnd_1 2>/dev/null)" != "true" ]; do
+  while [ "$($docker_command inspect -f '{{.State.Running}}' awning_lnd 2>/dev/null)" != "true" ]; do
     echo -e "Waiting for LND container to start..."
     sleep 10
     echo "Timed out waiting for the container to start."
@@ -290,7 +290,7 @@ function check_lnd(){
       fi
     done
     echo $password > ./data/lnd/password.txt
-    $docker_command exec -it awning_lnd_1 lncli create
+    $docker_command exec -it awning_lnd lncli create
     echo -e ""
   fi
 }
@@ -444,12 +444,12 @@ display_menu() {
         if [ $(are_services_up) -ne 0 ]; then
           echo -e "${RED}Node is not running!${NC}"
         else
-          URI=`cat ./data/tor/hidden_service_lnd_rest/hostname` && $docker_command exec awning_lnd_1 lndconnect --host $URI --port 8080
+          URI=`cat ./data/tor/hidden_service_lnd_rest/hostname` && $docker_command exec awning_lnd lndconnect --host $URI --port 8080
           echo ""
           echo "Press any key to get a code you can copy paste into the app"
           read -n 1 -s -r
           echo ""
-          URI=`cat ./data/tor/hidden_service_lnd_rest/hostname` && $docker_command exec awning_lnd_1 lndconnect -j  --host $URI --port 8080
+          URI=`cat ./data/tor/hidden_service_lnd_rest/hostname` && $docker_command exec awning_lnd lndconnect -j  --host $URI --port 8080
         fi
         echo ""
         echo "Press any key to continue..."
