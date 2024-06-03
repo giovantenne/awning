@@ -295,7 +295,6 @@ function check_lnd(){
   fi
 }
 
-
 function create_env_file() {
   BITCOIN_VERSIONS=($(get_latest_versions "bitcoin/bitcoin"))
   LND_VERSIONS=($(get_latest_versions "lightningnetwork/lnd"))
@@ -347,40 +346,29 @@ compose_build() {
   read -n 1 -s -r
 }
 
-
-# Function to update UID and GID in .env file
-update_env_file() {
-  local myuid=$1
-  local mygid=$2
-  sed -i "s/^UID=.*/UID=${myuid}/" .env
-  sed -i "s/^GID=.*/GID=${mygid}/" .env
-}
-
 are_services_up() {
   $compose_command ps | grep ' Up ' > /dev/null
   echo $?
 
 }
+
 # Function to display menu
 display_menu() {
   while true; do
     echo ""
     echo "#############################################"
-    echo -e "#               ${ORANGE}AWNING Menu${NC}                 #"
+    echo -e "#                 ${ORANGE}Awning${NC}                 #"
     echo "#############################################"
     if [ $(are_services_up) -ne 0 ]; then
       echo "1) Start the node"
     else
       echo "1) Stop the node"
     fi
-    echo "2) Check the logs (CRTL+C to exit)"
-    echo "3) Change the RTL password"
-    echo "4) Change Bitcoin version"
-    echo "5) Change LND version"
-    echo "6) Display web addresses"
-    echo "7) Display connection URL for Zeus Wallet"
-    echo "8) Restart"
-    echo "9) Update Awning"
+    echo "2) Node info"
+    echo "3) Logs"
+    echo "4) Change Awning node parameters"
+    echo "5) Display connections URLs"
+    echo "6) Utility"
     echo "0) Exit"
     echo "#############################################"
     echo ""
@@ -401,79 +389,65 @@ display_menu() {
         if [ $(are_services_up) -ne 0 ]; then
           echo -e "${RED}Node is not running!${NC}"
         else
-          logs_submenu
+          info_submenu
         fi
         ;;
-
       3)
-        change_rtl_password
-        if [ $(are_services_up) -ne 1 ]; then
-          $compose_command restart rtl
-        fi
-        ;;
-      4)
-        if (change_version "BITCOIN_CORE_VERSION" "bitcoin/bitcoin"); then
-          $compose_command build bitcoin
-          if [ $(are_services_up) -ne 1 ]; then
-            $compose_command down
-            $compose_command up -d
-          fi
-        fi
-        ;;
-      5)
-        if (change_version "LND_VERSION" "lightningnetwork/lnd") ; then
-          $compose_command build lnd
-          if [ $(are_services_up) -ne 1 ]; then
-            $compose_command down
-            $compose_command up -d
-          fi
-        fi
-        ;;
-      6)
-        echo -e "ELECTRS via TOR:     ${GREEN}${UNDERLINE}`cat ./data/tor/hidden_service_electrs/hostname`:50001${NC}${NC}"
-        echo -e "Electrs (ssl):       https://localhost:50002"
-        echo -e "LND Rest API (ssl):  https://localhost:8080"
-        echo -e "RTL (ssl):           https://localhost:8081"
-        echo -e "RTL (no ssl):        http://localhost:8082"
-        echo -e "BTCPay (ssl):        https://localhost:8083"
-        echo -e "BTCPay (no ssl):     http://localhost:8084"
-        echo "Press any key to continue..."
-        read -n 1 -s -r
-        ;;
-      7)
         if [ $(are_services_up) -ne 0 ]; then
           echo -e "${RED}Node is not running!${NC}"
         else
-          URI=`cat ./data/tor/hidden_service_lnd_rest/hostname` && $docker_command exec awning_lnd lndconnect --host $URI --port 8080
-          echo ""
-          echo "Press any key to get a code you can copy paste into the app"
-          read -n 1 -s -r
-          echo ""
-          URI=`cat ./data/tor/hidden_service_lnd_rest/hostname` && $docker_command exec awning_lnd lndconnect -j  --host $URI --port 8080
+          logs_submenu
         fi
-        echo ""
-        echo "Press any key to continue..."
-        read -n 1 -s -r
         ;;
-      8)
-        restart_submenu
+      4)
+        node_params_submenu
         ;;
-      9)
-        read -p "Do you want to proceed? (y/n): " answer
-        if [[ $answer =~ ^[Yy]$ ]]; then
-          $compose_command down
-          git stash
-          git pull
-          git stash apply
-        elif [[ $answer =~ ^[Nn]$ ]]; then
-          display_menu
-        else
-          echo "Invalid input."
-        fi
+      5)
+        connections_submenu
+        ;;
+      6)
+        utils_submenu
         ;;
       0)
         echo "Exiting."
         exit 0
+        ;;
+      *)
+        echo -e "${RED}Invalid option. Please try again.${NC}"
+        ;;
+    esac
+  done
+}
+
+info_submenu(){
+  while true; do
+    echo "#############################################"
+    echo "#                  Node info                #"
+    echo "#############################################"
+    echo "1) Bitcoin info"
+    echo "2) LND info"
+    echo "0) <-- Back to main menu"
+    echo "#############################################"
+    echo ""
+    echo -n "Choose an option: "
+    read option
+    case $option in
+      1)
+        $docker_command exec -it awning_bitcoin bitcoin-cli -getinfo
+        echo ""
+        echo "Press any key to continue..."
+        read -n 1 -s -r
+        ;;
+      2)
+        lnd_info=`$docker_command exec -it awning_lnd lncli getinfo`
+        echo ""
+        echo $lnd_info | jq 'del(.features)'
+        echo ""
+        echo "Press any key to continue..."
+        read -n 1 -s -r
+        ;;
+      0)
+        display_menu
         ;;
       *)
         echo -e "${RED}Invalid option. Please try again.${NC}"
@@ -491,6 +465,10 @@ logs_submenu(){
     echo "2) Bitcoin logs"
     echo "3) LND logs"
     echo "4) Electrs logs"
+    echo "5) RTL logs"
+    echo "6) TOR logs"
+    echo "7) SCB logs"
+    echo "8) Nginx logs"
     echo "0) <-- Back to main menu"
     echo "#############################################"
     echo ""
@@ -508,6 +486,164 @@ logs_submenu(){
         ;;
       4)
         $compose_command logs --tail 100 -f electrs
+        ;;
+      5)
+        $compose_command logs --tail 100 -f rtl
+        ;;
+      6)
+        $compose_command logs --tail 100 -f tor
+        ;;
+      7)
+        $compose_command logs --tail 100 -f scb
+        ;;
+      8)
+        $compose_command logs --tail 100 -f nginx
+        ;;
+      0)
+        display_menu
+        ;;
+      *)
+        echo -e "${RED}Invalid option. Please try again.${NC}"
+        ;;
+    esac
+  done
+}
+
+node_params_submenu() {
+  while true; do
+    echo "#############################################"
+    echo "#            Change params                  #"
+    echo "#############################################"
+    echo "1) Change the RTL password"
+    echo "2) Change Bitcoin version"
+    echo "3) Change LND version"
+    echo "0) <-- Back to main menu"
+    echo "#############################################"
+    echo ""
+    echo -n "Choose an option: "
+    read option
+    case $option in
+      1)
+        change_rtl_password
+        if [ $(are_services_up) -ne 1 ]; then
+          $compose_command restart rtl
+        fi
+        ;;
+      2)
+        if (change_version "BITCOIN_CORE_VERSION" "bitcoin/bitcoin"); then
+          $compose_command build bitcoin
+          if [ $(are_services_up) -ne 1 ]; then
+            $compose_command down
+            $compose_command up -d
+          fi
+        fi
+        ;;
+      3)
+        if (change_version "LND_VERSION" "lightningnetwork/lnd") ; then
+          $compose_command build lnd
+          if [ $(are_services_up) -ne 1 ]; then
+            $compose_command down
+            $compose_command up -d
+          fi
+        fi
+        ;;
+      0)
+        display_menu
+        ;;
+      *)
+        echo -e "${RED}Invalid option. Please try again.${NC}"
+        ;;
+    esac
+  done
+}
+
+connections_submenu() {
+  while true; do
+    echo "#############################################"
+    echo "#              Connections                  #"
+    echo "#############################################"
+    echo "1) Display web addresses"
+    echo "2) Display connection QR / URL for Zeus Wallet"
+    echo "0) <-- Back to main menu"
+    echo "#############################################"
+    echo ""
+    echo -n "Choose an option: "
+    read option
+    case $option in
+      1)
+        echo -e "ELECTRS via TOR:     ${GREEN}${UNDERLINE}`cat ./data/tor/hidden_service_electrs/hostname`:50001${NC}${NC}"
+        echo -e "Electrs (ssl):       https://localhost:50002"
+        echo -e "LND Rest API (ssl):  https://localhost:8080"
+        echo -e "RTL (ssl):           https://localhost:8081"
+        echo -e "RTL (no ssl):        http://localhost:8082"
+        echo -e "BTCPay (ssl):        https://localhost:8083"
+        echo -e "BTCPay (no ssl):     http://localhost:8084"
+        echo ""
+        echo -e "Replace ${UNDERLINE}localhost${NC} with the IP of your node if you are running Awning on a different PC."
+        echo "Press any key to continue..."
+        read -n 1 -s -r
+        ;;
+      2)
+        if [ $(are_services_up) -ne 0 ]; then
+          echo -e "${RED}Node is not running!${NC}"
+        else
+          URI=`cat ./data/tor/hidden_service_lnd_rest/hostname` && $docker_command exec awning_lnd lndconnect --host $URI --port 8082
+          echo ""
+          echo "Press any key to get a code you can copy paste into the app."
+          read -n 1 -s -r
+          echo ""
+          URI=`cat ./data/tor/hidden_service_lnd_rest/hostname` && $docker_command exec awning_lnd lndconnect -j  --host $URI --port 8080
+        fi
+        echo ""
+        echo "Press any key to continue..."
+        read -n 1 -s -r
+        ;;
+      0)
+        display_menu
+        ;;
+      *)
+        echo -e "${RED}Invalid option. Please try again.${NC}"
+        ;;
+    esac
+  done
+}
+
+utils_submenu() {
+  while true; do
+    echo "#############################################"
+    echo "#                Utilities                  #"
+    echo "#############################################"
+    echo "1) Restart services"
+    echo "2) Rebuild docker images"
+    echo "3) Run the SETUP tutorial"
+    echo "4) Update Awning"
+    echo "0) <-- Back to main menu"
+    echo "#############################################"
+    echo ""
+    echo -n "Choose an option: "
+    read option
+    case $option in
+      1)
+        restart_submenu
+        ;;
+      2)
+        rebuild_submenu
+        ;;
+      3)
+        setup_tutorial
+        ;;
+      4)
+        read -p "Do you want to proceed? (y/n): " answer
+        if [[ $answer =~ ^[Yy]$ ]]; then
+          $compose_command down
+          git stash
+          git pull
+          git stash apply
+        elif [[ $answer =~ ^[Nn]$ ]]; then
+          display_menu
+        else
+          echo "Invalid input."
+        fi
         ;;
       0)
         display_menu
@@ -527,9 +663,6 @@ restart_submenu() {
     echo "1) Restart the Awning node"
     echo "2) Restart Bitcoin"
     echo "3) Restart LND"
-    echo "4) Rebuild the node images"
-    echo "5) Rebuild the node images without cache (can take up to one hour)"
-    echo "6) Restart the SETUP tutorial"
     echo "0) <-- Back to main menu"
     echo "#############################################"
     echo ""
@@ -550,25 +683,44 @@ restart_submenu() {
       3)
         $compose_command restart lnd
         ;;
-      4)
+      0)
+        utils_submenu
+        ;;
+      *)
+        echo -e "${RED}Invalid option. Please try again.${NC}"
+        ;;
+    esac
+  done
+}
+rebuild_submenu() {
+  while true; do
+    echo "#############################################"
+    echo "#                Rebuild                    #"
+    echo "#############################################"
+    echo "1) Rebuild the node images"
+    echo "2) Rebuild the node images without cache (can take up to one hour)"
+    echo "0) <-- Back to main menu"
+    echo "#############################################"
+    echo ""
+    echo -n "Choose an option: "
+    read option
+    case $option in
+      1)
         $compose_command build
         if [ $(are_services_up) -ne 1 ]; then
           $compose_command down
           $compose_command up -d
         fi
         ;;
-      5)
+      2)
         $compose_command build --no-cache
         if [ $(are_services_up) -ne 1 ]; then
           $compose_command down
           $compose_command up -d
         fi
         ;;
-      6)
-        setup_tutorial
-        ;;
       0)
-        display_menu
+        utils_submenu
         ;;
       *)
         echo -e "${RED}Invalid option. Please try again.${NC}"
