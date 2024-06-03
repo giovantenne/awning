@@ -196,7 +196,7 @@ If you are running **Awning** on your PC you can access the web interface throug
 - [https://localhost:8081](https://localhost:8081)
 - [http://localhost:8082](http://localhost:8082)
 
-Replace `localhost` with the IP of your node if you are runnin **Awning** on a different PC.
+Replace `localhost` with the IP of your node if you are running **Awning** on a different PC.
 
 # Connect Zeus to your node (via TOR)
 - Download the Zeus app for your mobile phone.

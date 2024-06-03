@@ -3,7 +3,7 @@ ARG LND_VERSION
 ARG LND_ARCH
 ARG UID
 ARG GID
-RUN apt-get update && apt-get install -y wget curl gpg && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y wget curl jq gpg && rm -rf /var/lib/apt/lists/*
 RUN wget https://github.com/lightningnetwork/lnd/releases/download/v$LND_VERSION/lnd-linux-$LND_ARCH-v$LND_VERSION.tar.gz && \
   wget https://github.com/lightningnetwork/lnd/releases/download/v$LND_VERSION/manifest-v$LND_VERSION.txt && \
   wget https://github.com/lightningnetwork/lnd/releases/download/v$LND_VERSION/manifest-roasbeef-v$LND_VERSION.sig && \
