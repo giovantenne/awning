@@ -6,6 +6,9 @@ Something like [RaspiBolt](https://raspibolt.org/) but easier and automated. Bit
 **Awning** doesn't install anything on your PC, making it lightweight, customizable and portable.
 It is a plain/vanilla Docker setup.
 
+# Disclaimer
+Please read the [full disclaimer](DISCLAIMER.md) before using this project.
+
 # Prerequisites
 - git
 - docker
