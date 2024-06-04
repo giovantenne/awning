@@ -652,7 +652,7 @@ utils_submenu() {
           git pull
           git stash apply
           echo ""
-          echo "You may need to rebuild and/or the Awning services"
+          echo "You may need to rebuild and/or restart the Awning services"
           echo "Press any key to continue..."
           read -n 1 -s -r
         elif [[ $answer =~ ^[Nn]$ ]]; then
