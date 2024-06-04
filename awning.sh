@@ -80,6 +80,20 @@ is_ssh_github_repo() {
   fi
 }
 
+is_disk_space_available() {
+  script_dir="$(dirname "$(readlink -f "$0")")"
+  partition=$(df -P "$script_dir" | tail -1 | awk '{print $6}')
+  free_space_kb=$(df -P "$partition" | tail -1 | awk '{print $4}')
+  data_dir="$script_dir/data"
+  data_size_kb=$(du -sk "$data_dir" | awk '{print $1}')
+  required_free_space_kb=$((900000000 - data_size_kb))
+  if (( free_space_kb >= required_free_space_kb )); then
+    return 0
+  else
+    return 1
+  fi
+}
+
 show_welcome() {
   echo -e ""
   echo -e "Welcome to the ${ORANGE}${BOLD}Awning${NB}${NC} setup tutorial!"
@@ -91,13 +105,16 @@ show_welcome() {
   echo -e "${BOLD}By using the Project, you acknowledge that you have read, understood, and agree to be bound by this disclaimer. If you do not agree to this disclaimer, you should not use the Project.${NB}"
   echo -e "${BOLD}****************************************${NB}"
   echo -e ""
+  if ! is_disk_space_available; then
+    echo -e "${RED}The disk where you are running Awning doesn't have enough free space and can not contain the Bitcoin blockchain.${NC}"
+    echo -e "${RED}Please exit this setup with CTRL+C use a different disk.${NC}"
+    echo -e "----------------"
+  fi
   if ! is_bitcoin_blockchain_downloaded; then
     echo -e "It seems that you need to download the entire ${ORANGE}Bitcoin${NC} blockchain. This will take some time..."
     echo -e "If you already have the blockchain downloaded somewhere, please move it to ${UNDERLINE}./data/bitcoin/${NC} now."
     echo -e "----------------"
-  echo -e ""
   fi
-
   if ! is_lnd_initialized; then
     touch ./data/lnd/password.txt
     echo -e "It seems that you need to initialize your ${LIGHT_BLUE}LND${NC} wallet."
