@@ -357,15 +357,15 @@ display_menu() {
   while true; do
     echo ""
     echo "#############################################"
-    echo -e "#                  ${ORANGE}Awning${NC}                 #"
+    echo -e "#                  ${BOLD}${ORANGE}Awning${NC}${NB}                   #"
     echo "#############################################"
     if [ $(are_services_up) -ne 0 ]; then
       echo "1) Start the node"
     else
       echo "1) Stop the node"
     fi
-    echo "2) Node info"
-    echo "3) Logs"
+    echo "2) Logs"
+    echo "3) Node info"
     echo "4) Change Awning node parameters"
     echo "5) Display connections URLs"
     echo "6) Utility"
@@ -389,14 +389,14 @@ display_menu() {
         if [ $(are_services_up) -ne 0 ]; then
           echo -e "${RED}Node is not running!${NC}"
         else
-          info_submenu
+          logs_submenu
         fi
         ;;
       3)
         if [ $(are_services_up) -ne 0 ]; then
           echo -e "${RED}Node is not running!${NC}"
         else
-          logs_submenu
+          info_submenu
         fi
         ;;
       4)
@@ -426,7 +426,8 @@ info_submenu(){
     echo "#############################################"
     echo "1) Bitcoin info"
     echo "2) LND info"
-    echo -e "${BOLD}0) <-- Back to main menu${NB}"
+    echo ""
+    echo -e "${BOLD}0) <- Back to main menu${NB}"
     echo "#############################################"
     echo ""
     echo -n "Choose an option: "
@@ -469,7 +470,8 @@ logs_submenu(){
     echo "6) TOR logs"
     echo "7) SCB logs"
     echo "8) Nginx logs"
-    echo -e "${BOLD}0) <-- Back to main menu${NB}"
+    echo ""
+    echo -e "${BOLD}0) <- Back to main menu${NB}"
     echo "#############################################"
     echo ""
     echo -n "Choose an option: "
@@ -517,7 +519,8 @@ node_params_submenu() {
     echo "1) Change the RTL password"
     echo "2) Change Bitcoin version"
     echo "3) Change LND version"
-    echo -e "${BOLD}0) <-- Back to main menu${NB}"
+    echo ""
+    echo -e "${BOLD}0) <- Back to main menu${NB}"
     echo "#############################################"
     echo ""
     echo -n "Choose an option: "
@@ -564,7 +567,8 @@ connections_submenu() {
     echo "#############################################"
     echo "1) Display web addresses"
     echo "2) Display connection QR / URL for Zeus Wallet"
-    echo -e "${BOLD}0) <-- Back to main menu${NB}"
+    echo ""
+    echo -e "${BOLD}0) <- Back to main menu${NB}"
     echo "#############################################"
     echo ""
     echo -n "Choose an option: "
@@ -617,7 +621,8 @@ utils_submenu() {
     echo "2) Rebuild docker images"
     echo "3) Run the SETUP tutorial"
     echo "4) Update Awning"
-    echo -e "${BOLD}0) <-- Back to main menu${NB}"
+    echo ""
+    echo -e "${BOLD}0) <- Back to main menu${NB}"
     echo "#############################################"
     echo ""
     echo -n "Choose an option: "
@@ -664,7 +669,7 @@ restart_submenu() {
     echo "2) Restart Bitcoin"
     echo "3) Restart LND"
     echo ""
-    echo -e "${BOLD}0) <-- Back to utils menu${NB}"
+    echo -e "${BOLD}0) <- Back to utils menu${NB}"
     echo "#############################################"
     echo ""
     echo -n "Choose an option: "
@@ -701,7 +706,7 @@ rebuild_submenu() {
     echo "1) Rebuild the node images"
     echo "2) Rebuild the node images without cache (can take up to one hour)"
     echo ""
-    echo -e "${BOLD}0) <-- Back to utils menu${NB}"
+    echo -e "${BOLD}0) <- Back to utils menu${NB}"
     echo "#############################################"
     echo ""
     echo -n "Choose an option: "
