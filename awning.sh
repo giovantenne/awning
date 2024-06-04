@@ -648,10 +648,13 @@ utils_submenu() {
       6)
         read -p "Do you want to proceed? (y/n): " answer
         if [[ $answer =~ ^[Yy]$ ]]; then
-          $compose_command down
           git stash
           git pull
           git stash apply
+          echo ""
+          echo "You may need to rebuild and/or the Awning services"
+          echo "Press any key to continue..."
+          read -n 1 -s -r
         elif [[ $answer =~ ^[Nn]$ ]]; then
           display_menu
         else
