@@ -210,11 +210,9 @@ upload_scb_repo_deploy_key() {
   echo -e ""
   echo -e "Press ENTER to test your setup"
   read -n 1 -s -r
-
   echo "github.com ssh-ed25519 <REDACTED>
   github.com ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBEmKSENjQEezOmxkZMy7opKgwFB9nkt5YRrYMjNuG5N87uRgg6CLrbo5wAdT/y6v0mKV0U2w0WZ2YB/++Tpockg=
   github.com ssh-rsa <REDACTED>" >> ./data/scb/.ssh/known_hosts
-  
   rm -rf ./data/scb/test
   cd ./data/scb
   while true; do
@@ -344,19 +342,19 @@ function create_compose() {
 version: "3"
 services:
 EOT
-  cat ./fragments/tor.yml >> docker-compose.yml
-  cat ./fragments/bitcoin.yml >> docker-compose.yml
-  cat ./fragments/electrs.yml >> docker-compose.yml
-  cat ./fragments/lnd.yml >> docker-compose.yml
-  cat ./fragments/scb.yml >> docker-compose.yml
-  cat ./fragments/rtl.yml >> docker-compose.yml
-  cat ./fragments/nginx.yml >> docker-compose.yml
-  if [ "$RUN_BTCPAY" = "yes" ]; then
-    sed -i '/^  nginx:/,/depends_on:/s/^ *depends_on: \[rtl, electrs\]/    depends_on: [rtl, electrs, btcpay]/' docker-compose.yml
-    sed -i '/nginx:/,/restart: unless-stopped/{s/^      #\s*/      /}' docker-compose.yml
-    sed -i 's/nginx-reverse-proxy/nginx-reverse-proxy-btcpay/g' docker-compose.yml
-    cat ./fragments/btcpay.yml >> docker-compose.yml
-  fi
+cat ./fragments/tor.yml >> docker-compose.yml
+cat ./fragments/bitcoin.yml >> docker-compose.yml
+cat ./fragments/electrs.yml >> docker-compose.yml
+cat ./fragments/lnd.yml >> docker-compose.yml
+cat ./fragments/scb.yml >> docker-compose.yml
+cat ./fragments/rtl.yml >> docker-compose.yml
+cat ./fragments/nginx.yml >> docker-compose.yml
+if [ "$RUN_BTCPAY" = "yes" ]; then
+  sed -i '/^  nginx:/,/depends_on:/s/^ *depends_on: \[rtl, electrs\]/    depends_on: [rtl, electrs, btcpay]/' docker-compose.yml
+  sed -i '/nginx:/,/restart: unless-stopped/{s/^      #\s*/      /}' docker-compose.yml
+  sed -i 's/nginx-reverse-proxy/nginx-reverse-proxy-btcpay/g' docker-compose.yml
+  cat ./fragments/btcpay.yml >> docker-compose.yml
+fi
 
 }
 
@@ -460,7 +458,7 @@ info_submenu(){
     read option
     case $option in
       1)
-        $docker_command exec -it awning_bitcoin bitcoin-cli -getinfo
+        $docker_command exec -it awning_bitcoin bitcoin-cli getblockchaininfo
         echo ""
         echo "Press any key to continue..."
         read -n 1 -s -r
