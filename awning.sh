@@ -605,8 +605,10 @@ connections_submenu() {
         echo -e "LND Rest API (ssl):  https://localhost:8080"
         echo -e "RTL (ssl):           https://localhost:8081"
         echo -e "RTL (no ssl):        http://localhost:8082"
-        echo -e "BTCPay (ssl):        https://localhost:8083"
-        echo -e "BTCPay (no ssl):     http://localhost:8084"
+        if $docker_command ps --filter "name=awning_btcpay" --filter "status=running"|grep awning_btcpay; then
+          echo -e "BTCPay (ssl):        https://localhost:8083"
+          echo -e "BTCPay (no ssl):     http://localhost:8084"
+        fi
         echo ""
         echo -e "Replace ${UNDERLINE}localhost${NC} with the IP of your node if you are running Awning on a different PC."
         echo "Press any key to continue..."
