@@ -591,7 +591,7 @@ connections_submenu() {
         if [ $(are_services_up) -ne 0 ]; then
           echo -e "${RED}Node is not running!${NC}"
         else
-          URI=`cat ./data/tor/hidden_service_lnd_rest/hostname` && $docker_command exec awning_lnd lndconnect --host $URI --port 8082
+          URI=`cat ./data/tor/hidden_service_lnd_rest/hostname` && $docker_command exec awning_lnd lndconnect --host $URI --port 8080
           echo ""
           echo "Press any key to get a code you can copy paste into the app."
           read -n 1 -s -r
