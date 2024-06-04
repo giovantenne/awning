@@ -108,7 +108,7 @@ The `docker-compose.yml` file contains theme **Awning** docker services that you
 
 Since you are not using the `./awning.sh` utility script, just make a copy of the sample file.
 ```sh
-$ cp docker-compose.yml.sample docker-compose.yml
+$ cp docker-compose.sample.yml docker-compose.yml
 ```
 
 
@@ -246,7 +246,7 @@ $ URI=`cat ./data/tor/hidden_service_lnd_rest/hostname` && docker exec awning_ln
 │   ├── rtl
 │   ├── scb
 │   └── tor
-├── docker-compose.yml.sample
+├── docker-compose-sample.yml
 ├── dockerfiles
 │   ├── Dockerfile.bitcoin
 │   ├── Dockerfile.electrs
@@ -261,7 +261,7 @@ $ URI=`cat ./data/tor/hidden_service_lnd_rest/hostname` && docker exec awning_ln
 │   │   └── scb.sh
 │   └── files
 │       └── nginx.conf
-├── env.sample
+├── .env.sample
 ├── fragments
 │   ├── bitcoin.yml
 │   ├── btcpay.yml
