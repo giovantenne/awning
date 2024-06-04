@@ -617,10 +617,12 @@ utils_submenu() {
     echo "#############################################"
     echo "#                Utilities                  #"
     echo "#############################################"
-    echo "1) Restart services"
-    echo "2) Rebuild docker images"
-    echo "3) Run the SETUP tutorial"
-    echo "4) Update Awning"
+    echo "1) Enter the Bitcoin container (bitcoin-cli)"
+    echo "2) Enter the LND container (lncli)"
+    echo "3) Restart services"
+    echo "4) Rebuild docker images"
+    echo "5) Run the SETUP tutorial"
+    echo "6) Update Awning"
     echo ""
     echo -e "${BOLD}0) <- Back to main menu${NB}"
     echo "#############################################"
@@ -629,15 +631,21 @@ utils_submenu() {
     read option
     case $option in
       1)
-        restart_submenu
+        $docker_command exec -it awning_bitcoin bash
         ;;
       2)
-        rebuild_submenu
+        $docker_command exec -it awning_lnd bash
         ;;
       3)
-        setup_tutorial
+        restart_submenu
         ;;
       4)
+        rebuild_submenu
+        ;;
+      5)
+        setup_tutorial
+        ;;
+      6)
         read -p "Do you want to proceed? (y/n): " answer
         if [[ $answer =~ ^[Yy]$ ]]; then
           $compose_command down
