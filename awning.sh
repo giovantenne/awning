@@ -168,9 +168,9 @@ upload_scb_repo_deploy_key() {
     echo -e "SSH key already present in ${UNDERLINE}./data/scb/.ssh/${NC}"
   fi
 
-  echo "************************"
+  echo -e "************************${GREEN}"
   cat ./data/scb/.ssh/id_rsa.pub
-  echo "************************"
+  echo -e "${NC}************************"
   # Extract the username and repository name using parameter expansion
   # The SSH URL is expected to be in the format: git@github.com:username/repository.git
   local username=$(echo $SCB_REPO | cut -d':' -f2 | cut -d'/' -f1)
