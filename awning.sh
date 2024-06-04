@@ -12,7 +12,7 @@ NB='\e[0m'
 # Function to get the latest versions of software excluding 'rc' tags from GitHub
 get_latest_versions() {
   local repo=$1
-  curl -s "https://api.github.com/repos/${repo}/tags" | grep -oP '"name": "\K(.*?)(?=")' | grep -v 'rc' | head -n 5
+  curl -s "https://api.github.com/repos/${repo}/tags" | grep -oP '"name": "\K(.*?)(?=")' | grep -v 'rc' | sed 's/\(beta\).*/\1/' | head -n 5
 }
 
 # Function to detect architecture
