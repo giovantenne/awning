@@ -81,19 +81,28 @@ is_ssh_github_repo() {
 }
 
 show_welcome() {
+  echo -e ""
   echo -e "Welcome to the ${ORANGE}${BOLD}Awning${NB}${NC} setup tutorial!"
   echo -e "This script will guide you through setting up a full dockerized Bitcoin/LND/BTCPay server on your PC."
+  echo -e ""
+  echo -e "${BOLD}************ DISCLAIMER ****************${NB}"
+  echo -e "${BOLD}This open-source project ('the Project') is provided 'as-is' without any warranty of any kind, either expressed or implied. The developers are not liable for any damages or losses arising out of the use of this software.${NB}"
+  echo -e "${BOLD}Please read the full disclaimer before using the Project here: ${UNDERLINE}https://github.com/giovantenne/awning/blob/master/DISCLAIMER.md${NC}${NB}"
+  echo -e "${BOLD}By using the Project, you acknowledge that you have read, understood, and agree to be bound by this disclaimer. If you do not agree to this disclaimer, you should not use the Project.${NB}"
+  echo -e "${BOLD}****************************************${NB}"
+  echo -e ""
   if ! is_bitcoin_blockchain_downloaded; then
-    echo -e "----------------"
     echo -e "It seems that you need to download the entire ${ORANGE}Bitcoin${NC} blockchain. This will take some time..."
     echo -e "If you already have the blockchain downloaded somewhere, please move it to ${UNDERLINE}./data/bitcoin/${NC} now."
+    echo -e "----------------"
+  echo -e ""
   fi
 
   if ! is_lnd_initialized; then
     touch ./data/lnd/password.txt
-    echo -e "----------------"
     echo -e "It seems that you need to initialize your ${LIGHT_BLUE}LND${NC} wallet."
     echo -e "If you already have your LND data somewhere, please move it to ${UNDERLINE}./data/lnd/${NC} now."
+    echo -e "----------------"
   fi
 
   echo -e ""

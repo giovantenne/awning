@@ -1,6 +1,6 @@
 ### Disclaimer
 
-This open-source project ("the Project") is provided "as-is" without any warranty of any kind, either expressed or implied, including but not limited to the implied warranties of merchantability, fitness for a particular purpose, or non-infringement. The entire risk as to the quality and performance of the Project is with you.
+This open-source project ("the Project") is provided "as-is" without any warranty of any kind, either expressed or implied,  including but not limited to warranties of merchantability for a particular purpose or non-infringement. The developers are not liable for any damages or losses arising out of the use of this software.
 
 #### 1. No Financial Advice
 
