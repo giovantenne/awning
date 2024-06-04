@@ -527,9 +527,10 @@ node_params_submenu() {
     read option
     case $option in
       1)
-        change_rtl_password
-        if [ $(are_services_up) -ne 1 ]; then
-          $compose_command restart rtl
+        if (change_rtl_password); then
+          if [ $(are_services_up) -ne 1 ]; then
+            $compose_command restart rtl
+          fi
         fi
         ;;
       2)
@@ -754,8 +755,10 @@ change_rtl_password() {
   if [ ! -z "$new_rtl_password" ]; then
     sed -i "s/^RTL_PASSWORD=.*/RTL_PASSWORD=${new_rtl_password}/" .env
     echo -e "${GREEN}RTL password updated.${NC}"
+    return 0
   else
     echo -e "${GREEN}RTL password unchanged.${NC}"
+    return 1
   fi
 }
 
