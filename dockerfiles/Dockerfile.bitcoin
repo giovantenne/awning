@@ -3,7 +3,7 @@ ARG BITCOIN_CORE_VERSION
 ARG BITCOIN_ARCH
 ARG UID
 ARG GID
-RUN apt-get update && apt-get install -y wget curl gpg && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y wget curl jq gpg && rm -rf /var/lib/apt/lists/*
 RUN wget https://bitcoincore.org/bin/bitcoin-core-$BITCOIN_CORE_VERSION/bitcoin-$BITCOIN_CORE_VERSION-$BITCOIN_ARCH-linux-gnu.tar.gz && \
   wget https://bitcoincore.org/bin/bitcoin-core-$BITCOIN_CORE_VERSION/SHA256SUMS && \
   wget https://bitcoincore.org/bin/bitcoin-core-$BITCOIN_CORE_VERSION/SHA256SUMS.asc
