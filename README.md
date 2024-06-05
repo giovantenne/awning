@@ -106,11 +106,11 @@ $ cp .env.sample .env
 
 <a name="4"></a>
 # How to begin
-The `docker-compose.yml` file contains theme **Awning** docker services that your node will run. 
+The `docker-compose.yml` file contains the **Awning** docker services that your node will run.
 
 Since you are not using the `./awning.sh` utility script, just make a copy of the sample file.
 ```sh
-$ cp docker-compose.yml.sample docker-compose.yml
+$ cp docker-compose-sample.yml docker-compose.yml
 ```
 
 
@@ -134,7 +134,7 @@ After all the images are built, “bitcoind” should start, begin to sync and v
 Check the status of the bitcoin daemon that was started with the following command. Exit with Ctrl-C
 
 ```sh
-$ docker logs -f bitcoin
+$ docker logs -f awning_bitcoin
 ```
 
 Those services open the following TCP ports on your host:
@@ -248,7 +248,7 @@ $ URI=`cat ./data/tor/hidden_service_lnd_rest/hostname` && docker exec awning_ln
 │   ├── rtl
 │   ├── scb
 │   └── tor
-├── docker-compose.yml.sample
+├── docker-compose-sample.yml
 ├── dockerfiles
 │   ├── Dockerfile.bitcoin
 │   ├── Dockerfile.electrs
@@ -263,7 +263,7 @@ $ URI=`cat ./data/tor/hidden_service_lnd_rest/hostname` && docker exec awning_ln
 │   │   └── scb.sh
 │   └── files
 │       └── nginx.conf
-├── env.sample
+├── .env.sample
 ├── fragments
 │   ├── bitcoin.yml
 │   ├── btcpay.yml

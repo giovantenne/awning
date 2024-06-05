@@ -22,6 +22,21 @@ SCB_SOURCE_FILE="/lnd/data/chain/bitcoin/mainnet/channel.backup"
 LOCAL_BACKUP_DIR="/mnt/static-channel-backup-external"
 REMOTE_BACKUP_DIR="/data/backups"
 
+# check if id_rsa.pub is present
+if [ ! -f .ssh/id_rsa.pub ]; then
+  echo "id_rsa.pub missing. Creating one..."
+  ssh-keygen -t rsa -f /data/.ssh/id_rsa -b 4096 -N ""
+  #
+  # adding github public key fingerprints
+  echo "github.com ssh-ed25519 <REDACTED>
+github.com ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBEmKSENjQEezOmxkZMy7opKgwFB9nkt5YRrYMjNuG5N87uRgg6CLrbo5wAdT/y6v0mKV0U2w0WZ2YB/++Tpockg=
+github.com ssh-rsa <REDACTED>" >> /data/.ssh/known_hosts
+fi
+
+echo "-----------------------"
+cat .ssh/id_rsa.pub
+echo "-----------------------"
+
 # check if repo is present
 if [ ! -d $REMOTE_BACKUP_DIR ]; then
   while ! git clone $SCB_REPO $REMOTE_BACKUP_DIR
