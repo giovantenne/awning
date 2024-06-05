@@ -6,7 +6,9 @@ Something like [RaspiBolt](https://raspibolt.org/) but easier and automated. Bit
 **Awning** doesn't install anything on your PC, making it lightweight, customizable and portable.
 It is a plain/vanilla Docker setup.
 
-# Disclaimer
+## Disclaimer
+This open-source project is provided 'as-is' without any warranty of any kind, either expressed or implied. The developers are not liable for any damages or losses arising out of the use of this software.
+
 Please read the [full disclaimer](DISCLAIMER.md) before using this project.
 
 # Prerequisites
@@ -108,7 +110,7 @@ The `docker-compose.yml` file contains theme **Awning** docker services that you
 
 Since you are not using the `./awning.sh` utility script, just make a copy of the sample file.
 ```sh
-$ cp docker-compose.sample.yml docker-compose.yml
+$ cp docker-compose.yml.sample docker-compose.yml
 ```
 
 
@@ -246,7 +248,7 @@ $ URI=`cat ./data/tor/hidden_service_lnd_rest/hostname` && docker exec awning_ln
 │   ├── rtl
 │   ├── scb
 │   └── tor
-├── docker-compose-sample.yml
+├── docker-compose.yml.sample
 ├── dockerfiles
 │   ├── Dockerfile.bitcoin
 │   ├── Dockerfile.electrs
@@ -261,7 +263,7 @@ $ URI=`cat ./data/tor/hidden_service_lnd_rest/hostname` && docker exec awning_ln
 │   │   └── scb.sh
 │   └── files
 │       └── nginx.conf
-├── .env.sample
+├── env.sample
 ├── fragments
 │   ├── bitcoin.yml
 │   ├── btcpay.yml
