@@ -494,44 +494,6 @@ show_node_info() {
     read -n 1 -s -r
 }
 
-info_submenu(){
-  while true; do
-    echo "#############################################"
-    echo "#                  Node info                #"
-    echo "#############################################"
-    echo "1) Bitcoin info"
-    echo "2) LND info"
-    echo ""
-    echo -e "${BOLD}0) <- Back to main menu${NB}"
-    echo "#############################################"
-    echo ""
-    echo -n "Choose an option: "
-    read option
-    case $option in
-      1)
-        $docker_command exec -it awning_bitcoin bitcoin-cli getblockchaininfo
-        echo ""
-        echo "Press any key to continue..."
-        read -n 1 -s -r
-        ;;
-      2)
-        lnd_info=`$docker_command exec -it awning_lnd lncli getinfo`
-        echo ""
-        echo $lnd_info | jq 'del(.features)'
-        echo ""
-        echo "Press any key to continue..."
-        read -n 1 -s -r
-        ;;
-      0)
-        display_menu
-        ;;
-      *)
-        echo -e "${RED}Invalid option. Please try again.${NC}"
-        ;;
-    esac
-  done
-}
-
 logs_submenu(){
   while true; do
     echo "#############################################"
@@ -544,7 +506,6 @@ logs_submenu(){
     echo "5) RTL logs"
     echo "6) TOR logs"
     echo "7) SCB logs"
-    echo "8) Nginx logs"
     echo ""
     echo -e "${BOLD}0) <- Back to main menu${NB}"
     echo "#############################################"
@@ -573,8 +534,6 @@ logs_submenu(){
       7)
         $compose_command logs --tail 100 -f scb
         ;;
-      8)
-        $compose_command logs --tail 100 -f nginx
         ;;
       0)
         display_menu
