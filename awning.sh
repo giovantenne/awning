@@ -534,7 +534,6 @@ logs_submenu(){
       7)
         $compose_command logs --tail 100 -f scb
         ;;
-        ;;
       0)
         display_menu
         ;;
