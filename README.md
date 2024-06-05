@@ -34,7 +34,7 @@ $ ./awning.sh
 ```
 You can run the `./awning.sh` utility script every time you want to interact with your node.
 
-Enjoy ;-)
+https://github.com/giovantenne/awning/assets/917400/43319ca7-4552-4608-b3ce-2b2ddd9778dd
 
 
 # ... or manually setup your node instead:
