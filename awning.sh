@@ -461,18 +461,18 @@ display_menu() {
 
 show_node_info() {
     bitcoin_version=$($docker_command exec awning_bitcoin bitcoin-cli --version | grep "Bitcoin Core RPC client version")
-    sync_percentage=$($docker_command exec awning_bitcoin bitcoin-cli getblockchaininfo | jq -r '.verificationprogress')
-    blocks=$($docker_command exec awning_bitcoin bitcoin-cli getblockchaininfo | jq -r '.blocks')
-    headers=$($docker_command exec awning_bitcoin bitcoin-cli getblockchaininfo | jq -r '.headers')
-    initialblockdownload=$($docker_command exec awning_bitcoin bitcoin-cli getblockchaininfo | jq -r '.initialblockdownload')
+    sync_percentage=$($docker_command exec awning_bitcoin /bin/bash -c "bitcoin-cli getblockchaininfo | jq -r '.verificationprogress'")
+    blocks=$($docker_command exec awning_bitcoin /bin/bash -c "bitcoin-cli getblockchaininfo | jq -r '.blocks'")
+    headers=$($docker_command exec awning_bitcoin /bin/bash -c "bitcoin-cli getblockchaininfo | jq -r '.headers'")
+    initialblockdownload=$($docker_command exec awning_bitcoin /bin/bash -c "bitcoin-cli getblockchaininfo | jq -r '.initialblockdownload'")
 
-    lnd_version=$($docker_command exec awning_lnd lncli getinfo | jq -r '.version')
-    synced_to_chain=$($docker_command exec awning_lnd lncli getinfo | jq -r '.synced_to_chain')
-    synced_to_graph=$($docker_command exec awning_lnd lncli getinfo | jq -r '.synced_to_graph')
-    num_pending_channels=$($docker_command exec awning_lnd lncli getinfo | jq -r '.num_pending_channels')
-    num_active_channels=$($docker_command exec awning_lnd lncli getinfo | jq -r '.num_active_channels')
-    num_inactive_channels=$($docker_command exec awning_lnd lncli getinfo | jq -r '.num_inactive_channels')
-    num_peers=$($docker_command exec awning_lnd lncli getinfo | jq -r '.num_peers')
+    lnd_version=$($docker_command exec awning_lnd /bin/bash -c "lncli getinfo | jq -r '.version'")
+    synced_to_chain=$($docker_command exec awning_lnd /bin/bash -c "lncli getinfo | jq -r '.synced_to_chain'")
+    synced_to_graph=$($docker_command exec awning_lnd /bin/bash -c "lncli getinfo | jq -r '.synced_to_graph'")
+    num_pending_channels=$($docker_command exec awning_lnd /bin/bash -c "lncli getinfo | jq -r '.num_pending_channels'")
+    num_active_channels=$($docker_command exec awning_lnd /bin/bash -c "lncli getinfo | jq -r '.num_active_channels'")
+    num_inactive_channels=$($docker_command exec awning_lnd /bin/bash -c "lncli getinfo | jq -r '.num_inactive_channels'")
+    num_peers=$($docker_command exec awning_lnd /bin/bash -c "lncli getinfo | jq -r '.num_peers'")
     echo ""
     echo -e "${ORANGE}BITCOIN${NC}"
     echo -e $bitcoin_version
