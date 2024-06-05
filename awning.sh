@@ -602,17 +602,16 @@ connections_submenu() {
     read option
     case $option in
       1)
+        local local_ip=$(hostname -I | awk '{print $1}')
         echo -e "ELECTRS via TOR:     ${GREEN}${UNDERLINE}`cat ./data/tor/hidden_service_electrs/hostname`:50001${NC}${NC}"
-        echo -e "Electrs (ssl):       https://localhost:50002"
-        echo -e "LND Rest API (ssl):  https://localhost:8080"
-        echo -e "RTL (ssl):           https://localhost:8081"
-        echo -e "RTL (no ssl):        http://localhost:8082"
+        echo -e "Electrs (ssl):       https://$local_ip:50002"
+        echo -e "LND Rest API (ssl):  https://$local_ip:8080"
+        echo -e "RTL (ssl):           https://$local_ip:8081"
+        echo -e "RTL (no ssl):        http://$local_ip:8082"
         if $docker_command ps --filter "name=awning_btcpay" --filter "status=running"|grep awning_btcpay > /dev/null; then
-          echo -e "BTCPay (ssl):        https://localhost:8083"
-          echo -e "BTCPay (no ssl):     http://localhost:8084"
+          echo -e "BTCPay (ssl):        https://$local_ip:8083"
+          echo -e "BTCPay (no ssl):     http://$local_ip:8084"
         fi
-        echo ""
-        echo -e "Replace ${UNDERLINE}localhost${NC} with the IP of your node if you are running Awning on a different PC."
         echo ""
         echo "Press any key to continue..."
         read -n 1 -s -r
@@ -679,7 +678,7 @@ utils_submenu() {
         read -p "Do you want to proceed? (y/n): " answer
         if [[ $answer =~ ^[Yy]$ ]]; then
           git stash
-          git pull
+          git pull origin master
           git stash apply
           echo ""
           echo "You may need to rebuild and/or restart the Awning services"
