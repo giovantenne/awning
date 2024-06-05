@@ -231,8 +231,12 @@ upload_scb_repo_deploy_key() {
   while true; do
     echo -e "Performing test. Please wait..."
     # Test read
-    git config --global user.email "awning@example.com"
-    git config --global user.name "Awning"
+    if ! git config --global user.email &>/dev/null; then
+      git config --global user.email "awning@example.com"
+    fi
+    if ! git config --global user.name &>/dev/null; then
+      git config --global user.name "Awning"
+    fi
     GIT_SSH_COMMAND="ssh -o UserKnownHostsFile=.ssh/known_hosts -o IdentitiesOnly=yes -i .ssh/id_rsa" git clone $SCB_REPO test #>/dev/null 2>&1
     if [ $? -ne 0 ]; then
       echo -e "${RED}${BOLD}Read rest failed!${NB}${NC}"
