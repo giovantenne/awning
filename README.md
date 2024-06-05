@@ -26,7 +26,6 @@ $ sudo apt-get install -y docker.io docker-compose-v2 git
 1. Clone this repository
 2. Run the awning.sh utility script
 
-Clone or download this repository, enter the project directory and run the utility script:
 ```sh
 $ git clone https://github.com/giovantenne/awning.git
 $ cd awning
