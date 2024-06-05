@@ -461,7 +461,7 @@ display_menu() {
 
 show_node_info() {
     bitcoin_version=$($docker_command exec awning_bitcoin bitcoin-cli --version | grep "Bitcoin Core RPC client version")
-    sync_percentage=$($docker_command exec awning_bitcoin /bin/bash -c "bitcoin-cli getblockchaininfo | jq -r '.verificationprogress'")
+    sync_percentage=$($docker_command exec awning_bitcoin /bin/bash -c 'echo "`bitcoin-cli getblockchaininfo | jq -r '.verificationprogress'` * 100" | bc')
     blocks=$($docker_command exec awning_bitcoin /bin/bash -c "bitcoin-cli getblockchaininfo | jq -r '.blocks'")
     headers=$($docker_command exec awning_bitcoin /bin/bash -c "bitcoin-cli getblockchaininfo | jq -r '.headers'")
     initialblockdownload=$($docker_command exec awning_bitcoin /bin/bash -c "bitcoin-cli getblockchaininfo | jq -r '.initialblockdownload'")
