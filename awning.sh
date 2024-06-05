@@ -5,6 +5,7 @@ ORANGE='\033[38;5;214m'
 LIGHT_BLUE='\033[1;34m'
 UNDERLINE='\033[4m'
 GREEN='\033[0;32m'
+MAGENTA="\e[36m"
 NC='\033[0m' # No Color
 BOLD='\e[1m'
 NB='\e[0m'
@@ -152,10 +153,22 @@ insert_scb_repo() {
   echo -e "         It should be something like ${UNDERLINE}git@github.com:giovantenne/remote-lnd-backup.git${NC}"
 
   echo -e ""
-
+  if [ -f .env ]; then
+    current_repo=$(grep -E '^\s*SCB_REPO\s*=' .env | sed -e 's/^\s*SCB_REPO\s*=\s*//' -e 's/\s*$//')
+  else
+    current_repo=""
+  fi
   while true; do
-    echo -en "Enter your SSH repository address: "
+    if [ -z "$current_repo" ]; then
+      echo -en "Enter your SSH repository address: "
+    else
+      echo -e "Current value: ${UNDERLINE}$current_repo${NC}"
+      echo -en "Enter your SSH repository address (press ENTER to keep current): "
+    fi
     read SCB_REPO
+    if [ -z "$SCB_REPO" ]; then
+      SCB_REPO=$current_repo
+    fi
     if is_ssh_github_repo "$SCB_REPO"; then
       break
     else
@@ -376,6 +389,7 @@ are_services_up() {
 
 }
 
+
 # Function to display menu
 display_menu() {
   while true; do
@@ -417,10 +431,12 @@ display_menu() {
         fi
         ;;
       3)
+        echo ""
+        echo "Loading..."
         if [ $(are_services_up) -ne 0 ]; then
           echo -e "${RED}Node is not running!${NC}"
         else
-          info_submenu
+          show_node_info
         fi
         ;;
       4)
@@ -441,6 +457,41 @@ display_menu() {
         ;;
     esac
   done
+}
+
+show_node_info() {
+    bitcoin_version=$($docker_command exec awning_bitcoin bitcoin-cli --version | grep "Bitcoin Core RPC client version")
+    sync_percentage=$($docker_command exec awning_bitcoin bitcoin-cli getblockchaininfo | jq -r '.verificationprogress')
+    blocks=$($docker_command exec awning_bitcoin bitcoin-cli getblockchaininfo | jq -r '.blocks')
+    headers=$($docker_command exec awning_bitcoin bitcoin-cli getblockchaininfo | jq -r '.headers')
+    initialblockdownload=$($docker_command exec awning_bitcoin bitcoin-cli getblockchaininfo | jq -r '.initialblockdownload')
+
+    lnd_version=$($docker_command exec awning_lnd lncli getinfo | jq -r '.version')
+    synced_to_chain=$($docker_command exec awning_lnd lncli getinfo | jq -r '.synced_to_chain')
+    synced_to_graph=$($docker_command exec awning_lnd lncli getinfo | jq -r '.synced_to_graph')
+    num_pending_channels=$($docker_command exec awning_lnd lncli getinfo | jq -r '.num_pending_channels')
+    num_active_channels=$($docker_command exec awning_lnd lncli getinfo | jq -r '.num_active_channels')
+    num_inactive_channels=$($docker_command exec awning_lnd lncli getinfo | jq -r '.num_inactive_channels')
+    num_peers=$($docker_command exec awning_lnd lncli getinfo | jq -r '.num_peers')
+    echo ""
+    echo -e "${ORANGE}BITCOIN${NC}"
+    echo -e $bitcoin_version
+    echo -e "Sync Progress: $sync_percentage%"
+    echo -e "Blocks: $blocks"
+    echo -e "Headers: $headers"
+    echo -e "Initial block download: $initialblockdownload"
+    echo ""
+    echo -e "${LIGHT_BLUE}LND${NC}"
+    echo -e "Version $lnd_version"
+    echo -e "Synced to Chain: $synced_to_chain"
+    echo -e "Synced to Graph: $synced_to_graph"
+    echo -e "Num. active channels: $num_active_channels"
+    echo -e "Num. pending channels: $num_pending_channels"
+    echo -e "Num. inactive channels: $num_inactive_channels"
+    echo -e "Num. peers: $num_peers"
+    echo ""
+    echo "Press any key to continue..."
+    read -n 1 -s -r
 }
 
 info_submenu(){
@@ -682,6 +733,8 @@ utils_submenu() {
           echo ""
           echo "You may need to rebuild and/or restart the Awning services"
           echo "Press any key to continue..."
+          exec ./awning.sh
+          exit
           read -n 1 -s -r
         elif [[ $answer =~ ^[Nn]$ ]]; then
           display_menu
