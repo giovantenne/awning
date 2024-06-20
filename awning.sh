@@ -391,11 +391,7 @@ display_menu() {
     echo "#############################################"
     echo -e "#                  ${BOLD}${ORANGE}Awning${NC}${NB}                   #"
     echo "#############################################"
-    if [ $(are_services_up) -ne 0 ]; then
-      echo "1) Start the node"
-    else
-      echo "1) Stop the node"
-    fi
+    echo "1) Start/Stop the node"
     echo "2) Logs"
     echo "3) Node info"
     echo "4) Change node parameters"
@@ -409,12 +405,20 @@ display_menu() {
 
     case $option in
       1)
+        echo "Loading..."
+        echo ""
         if [ $(are_services_up) -ne 0 ]; then
-          echo "Starting the node..."
-          $compose_command up -d
+          read -p "Node is not running. Do you want to start the node? (y/n): " answer
+          if [[ $answer =~ ^[Yy]$ ]]; then
+            echo "Starting the node..."
+            $compose_command up -d
+          fi
         else
-          echo "Stopping the node..."
-          $compose_command down
+          read -p "Node is running. Do you want to stop the node? (y/n): " answer
+          if [[ $answer =~ ^[Yy]$ ]]; then
+            echo "Stopping the node..."
+            $compose_command down
+          fi
         fi
         ;;
       2)
