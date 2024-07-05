@@ -184,7 +184,7 @@ upload_scb_repo_deploy_key() {
     mkdir -p ./data/scb/.ssh
 
     # Generating ssh key
-    $docker_command run --rm -e MYUID=$MYUID -e MYGID=$MYGID -v "./data/scb/.ssh:/keys" debian:bookworm-slim sh -c "
+    $docker_command run --rm -e MYUID=$MYUID -e MYGID=$MYGID -v "$PWD/data/scb/.ssh:/keys" debian:bookworm-slim sh -c "
     apt-get update && \
       DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends openssh-client && \
       ssh-keygen -t rsa -b 2048 -f /keys/id_rsa -N '' && \
