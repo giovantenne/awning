@@ -237,8 +237,8 @@ upload_scb_repo_deploy_key() {
       cd test
       touch test >/dev/null 2>&1
       git add test   >/dev/null 2>&1
-      git branch -M main
       git commit -am "Test"  >/dev/null 2>&1
+      git branch -M main
       # Test write
       GIT_SSH_COMMAND="ssh -o UserKnownHostsFile=../.ssh/known_hosts -o IdentitiesOnly=yes -i ../.ssh/id_rsa" git push $SCB_REPO main #>/dev/null 2>&1
       if [ $? -ne 0 ]; then
