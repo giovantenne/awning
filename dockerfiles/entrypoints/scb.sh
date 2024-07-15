@@ -45,7 +45,8 @@ if [ ! -d $REMOTE_BACKUP_DIR ]; then
   done
 else
   cd $REMOTE_BACKUP_DIR || exit
-  git pull
+  git fetch
+  git rebase origin/main
 fi;
 
 # Safety bash script options
