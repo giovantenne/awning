@@ -330,6 +330,6 @@ $ docker-compose up -d --build
 For any questions or issues you can join our [Telegram support channel](https://t.me/awning_node) or open a [Github issue](https://github.com/giovantenne/awning/issues/new).
 
 # Donations/Project contributions
-If you would like to contribute and help dev team with this project you can send a donation to the following LN address ⚡`donate@btcpay.cryptogadgets.net`⚡ or on-chain   `bc1qg2t8vnahzv5yy7e885l0a59ggagne9nxdvts4t`
+If you would like to contribute and help dev team with this project you can send a donation to the following LN address ⚡`cryptogadgets@pos.btcpayserver.it`⚡ or on-chain `bc1qguuehe5pklgyzkt4489yqxdazwltep2pchxaap`
 
 Enjoy!
