@@ -13,11 +13,12 @@ Please read the [full disclaimer](DISCLAIMER.md) before using this project.
 
 # Prerequisites
 - git
+- curl
 - docker
 - docker-compose (or [`docker compose plugin`](https://docs.docker.com/compose/install/linux/))
 
 ```sh
-$ sudo apt-get install -y docker.io docker-compose-v2 git
+$ sudo apt-get install -y docker.io docker-compose-v2 git curl
 ```
 
 
