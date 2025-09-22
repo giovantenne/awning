@@ -346,7 +346,6 @@ EOT
 
 function create_compose() {
   cat <<EOT > docker-compose.yml
-version: "3"
 services:
 EOT
 cat ./fragments/tor.yml >> docker-compose.yml
