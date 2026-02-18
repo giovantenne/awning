@@ -1,112 +1,99 @@
 #!/bin/bash
+set -euo pipefail
 
-# Safety bash script options
-# # -e causes a bash script to exit immediately when a command fails
-# # -u causes the bash shell to treat unset variables as an error and exit immediately.
-# set -eu
-#
-# # The script waits for a change in /data/lnd/data/chain/bitcoin/mainnet/channel.backup.
-# # When a change happens, it creates a backup of the file locally
-# #   on a storage device and/or remotely in a GitHub repo
-#
-# # By default, both methods are used. If you do NOT want to use one of the
-# #   method, replace "true" by "false" in the two variables below:
-cd /data
-git config --global user.email "awning@dummyemail.com" 
-git config --global user.name "Awning"
+# Awning v2: Static Channel Backup (SCB) entrypoint
+# Watches LND's channel.backup file and pushes changes to a GitHub repository
+# Uses inotifywait for efficient file monitoring with exponential backoff on failures
 
-REMOTE_BACKUP_ENABLED=true
-LOCAL_BACKUP_ENABLED=false
+SCB_SOURCE="/lnd/data/chain/bitcoin/mainnet/channel.backup"
+BACKUP_DIR="/data/backups"
+MAX_RETRY_DELAY=300  # 5 minutes max between retries
 
-SCB_SOURCE_FILE="/lnd/data/chain/bitcoin/mainnet/channel.backup"
-LOCAL_BACKUP_DIR="/mnt/static-channel-backup-external"
-REMOTE_BACKUP_DIR="/data/backups"
+log() { echo "[SCB] $(date '+%H:%M:%S') $*"; }
 
-# check if id_rsa.pub is present
-if [ ! -f .ssh/id_rsa.pub ]; then
-  echo "id_rsa.pub missing. Creating one..."
-  ssh-keygen -t rsa -f /data/.ssh/id_rsa -b 4096 -N ""
-  #
-  # adding github public key fingerprints
-  echo "github.com ssh-ed25519 <REDACTED>
-github.com ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBEmKSENjQEezOmxkZMy7opKgwFB9nkt5YRrYMjNuG5N87uRgg6CLrbo5wAdT/y6v0mKV0U2w0WZ2YB/++Tpockg=
-github.com ssh-rsa <REDACTED>" >> /data/.ssh/known_hosts
+# --- SSH key setup ---
+if [ ! -f /data/.ssh/id_ed25519 ]; then
+    log "Generating SSH key..."
+    mkdir -p /data/.ssh
+    ssh-keygen -t ed25519 -f /data/.ssh/id_ed25519 -N "" -q
 fi
 
-echo "-----------------------"
-cat .ssh/id_rsa.pub
-echo "-----------------------"
+# GitHub host keys (avoids interactive prompt)
+if [ ! -f /data/.ssh/known_hosts ]; then
+    mkdir -p /data/.ssh
+    cat > /data/.ssh/known_hosts <<'KEYS'
+github.com ssh-ed25519 <REDACTED>
+github.com ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBEmKSENjQEezOmxkZMy7opKgwFB9nkt5YRrYMjNuG5N87uRgg6CLrbo5wAdT/y6v0mKV0U2w0WZ2YB/++Tpockg=
+github.com ssh-rsa <REDACTED>
+KEYS
+fi
 
-# check if repo is present
-if [ ! -d $REMOTE_BACKUP_DIR ]; then
-  while ! git clone $SCB_REPO $REMOTE_BACKUP_DIR
-  do
-    sleep 30
-  done
-else
-  cd $REMOTE_BACKUP_DIR || exit
-  git fetch
-  git rebase origin/main
-fi;
+log "--- SSH Public Key (add this to your GitHub repo as a deploy key with write access) ---"
+cat /data/.ssh/id_ed25519.pub
+log "---"
 
-# Safety bash script options
-# -e causes a bash script to exit immediately when a command fails
-# -u causes the bash shell to treat unset variables as an error and exit immediately.
-set -eu
+# --- Git config ---
+git config --global user.email "awning@backup"
+git config --global user.name "Awning SCB"
 
-# The script waits for a change in /data/lnd/data/chain/bitcoin/mainnet/channel.backup.
-# When a change happens, it creates a backup of the file locally
-#   and remotely in a GitHub repo
-
-# By default, both methods are used. If you do NOT want to use one of the
-#   method, replace "true" by "false" in the two variables below:
-
-# Remote backup function
-run_remote_backup_on_change () {
-  echo "Entering Git repository..."
-  cd $REMOTE_BACKUP_DIR || exit
-  echo "Making a timestamped copy of channel.backup..."
-  echo "$1"
-  cp "$SCB_SOURCE_FILE" "$1"
-  echo "Committing changes and adding a message"
-  git add .
-  git commit --allow-empty -m "Static Channel Backup $(date +"%Y%m%d-%H%M%S")"
-  echo "Pushing changes to remote repository..."
-  git push --set-upstream origin main
-  echo "Success! The file is now remotely backed up!"
-}
-
-
-# Monitoring function
-run () {
-  while true; do
-
-    if [ -f $SCB_SOURCE_FILE ]; then
-      inotifywait $SCB_SOURCE_FILE
-      echo "channel.backup has been changed!"
-
-      LOCAL_BACKUP_FILE="$LOCAL_BACKUP_DIR/channel-$(date +"%Y%m%d-%H%M%S").backup"
-      REMOTE_BACKUP_FILE="$REMOTE_BACKUP_DIR/channel.backup"
-
-      if [ "$LOCAL_BACKUP_ENABLED" == true ]; then
-        echo "Local backup is enabled"
-        run_local_backup_on_change "$LOCAL_BACKUP_FILE"
-      fi
-
-      if [ "$REMOTE_BACKUP_ENABLED" == true ]; then
-        echo "Remote backup is enabled"
-        run_remote_backup_on_change "$REMOTE_BACKUP_FILE"
-      fi
-    else
-      echo "LND not ready. Waiting 30 seconds..."
-      sleep 30
+# --- Clone or update repo ---
+setup_repo() {
+    if [ -z "${SCB_REPO:-}" ]; then
+        log "ERROR: SCB_REPO environment variable not set"
+        exit 1
     fi
 
-  done
+    if [ ! -d "${BACKUP_DIR}/.git" ]; then
+        log "Cloning backup repository..."
+        local delay=5
+        while ! git clone "${SCB_REPO}" "${BACKUP_DIR}" 2>&1; do
+            log "Clone failed, retrying in ${delay}s..."
+            sleep "${delay}"
+            delay=$(( delay * 2 > MAX_RETRY_DELAY ? MAX_RETRY_DELAY : delay * 2 ))
+        done
+    else
+        log "Updating existing backup repository..."
+        cd "${BACKUP_DIR}"
+        git fetch origin 2>&1 || true
+        git reset --hard origin/main 2>&1 || true
+    fi
 }
 
-run
+# --- Push backup ---
+push_backup() {
+    local delay=5
+    cd "${BACKUP_DIR}"
 
+    cp "${SCB_SOURCE}" "${BACKUP_DIR}/channel.backup"
 
+    git add channel.backup
+    if git diff --cached --quiet; then
+        log "No changes to commit"
+        return 0
+    fi
 
+    git commit -m "SCB $(date +"%Y-%m-%d %H:%M:%S")"
 
+    while ! git push origin main 2>&1; do
+        log "Push failed, retrying in ${delay}s..."
+        sleep "${delay}"
+        delay=$(( delay * 2 > MAX_RETRY_DELAY ? MAX_RETRY_DELAY : delay * 2 ))
+    done
+
+    log "Backup pushed successfully"
+}
+
+# --- Main loop ---
+setup_repo
+
+log "Watching for channel.backup changes..."
+while true; do
+    if [ -f "${SCB_SOURCE}" ]; then
+        inotifywait -q -e modify,create "${SCB_SOURCE}"
+        log "channel.backup changed, backing up..."
+        push_backup || log "WARNING: Backup failed, will retry on next change"
+    else
+        log "Waiting for LND to create channel.backup..."
+        sleep 30
+    fi
+done
