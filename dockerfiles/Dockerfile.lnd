@@ -1,27 +1,62 @@
+# Awning v2: LND (Lightning Network Daemon)
+# Multi-stage build with GPG verification following RaspiBolt best practices
+
+FROM debian:bookworm-slim AS verifier
+ARG LND_VERSION
+ARG LND_ARCH
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    wget ca-certificates gnupg curl && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /tmp
+
+# Download LND binary, manifest, and signature
+RUN wget -q "https://github.com/lightningnetwork/lnd/releases/download/v${LND_VERSION}/lnd-linux-${LND_ARCH}-v${LND_VERSION}.tar.gz" \
+    && wget -q "https://github.com/lightningnetwork/lnd/releases/download/v${LND_VERSION}/manifest-v${LND_VERSION}.txt" \
+    && wget -q "https://github.com/lightningnetwork/lnd/releases/download/v${LND_VERSION}/manifest-roasbeef-v${LND_VERSION}.sig"
+
+# Verify checksum
+RUN sha256sum --check manifest-v${LND_VERSION}.txt --ignore-missing
+
+# Import roasbeef's key and verify signature
+RUN curl -s https://raw.githubusercontent.com/lightningnetwork/lnd/master/scripts/keys/roasbeef.asc | gpg --import \
+    && gpg --verify manifest-roasbeef-v${LND_VERSION}.sig manifest-v${LND_VERSION}.txt
+
+# Extract binaries
+RUN tar -xzf lnd-linux-${LND_ARCH}-v${LND_VERSION}.tar.gz
+
+# Download lndconnect for Zeus wallet QR codes
+RUN wget -q "https://github.com/LN-Zap/lndconnect/releases/download/v0.2.0/lndconnect-linux-${LND_ARCH}-v0.2.0.tar.gz" \
+    && tar -xzf lndconnect-linux-${LND_ARCH}-v0.2.0.tar.gz
+
+# --- Runtime image ---
 FROM debian:bookworm-slim
 ARG LND_VERSION
 ARG LND_ARCH
-ARG UID
-ARG GID
-RUN apt-get update && apt-get install -y wget curl jq bc gpg && rm -rf /var/lib/apt/lists/*
-RUN wget https://github.com/lightningnetwork/lnd/releases/download/v$LND_VERSION/lnd-linux-$LND_ARCH-v$LND_VERSION.tar.gz && \
-  wget https://github.com/lightningnetwork/lnd/releases/download/v$LND_VERSION/manifest-v$LND_VERSION.txt && \
-  wget https://github.com/lightningnetwork/lnd/releases/download/v$LND_VERSION/manifest-roasbeef-v$LND_VERSION.sig && \
-  wget https://github.com/lightningnetwork/lnd/releases/download/v$LND_VERSION/manifest-roasbeef-v$LND_VERSION.sig.ots
-RUN sha256sum --check manifest-v$LND_VERSION.txt --ignore-missing
-RUN curl https://raw.githubusercontent.com/lightningnetwork/lnd/master/scripts/keys/roasbeef.asc | gpg --import
-RUN gpg --verify manifest-roasbeef-v$LND_VERSION.sig manifest-v$LND_VERSION.txt
-RUN tar -xvf lnd-linux-$LND_ARCH-v$LND_VERSION.tar.gz
-RUN install -m 0755 -o root -g root -t /usr/local/bin lnd-linux-$LND_ARCH-v$LND_VERSION/*
+ARG UID=1000
+ARG GID=1000
 
-RUN wget https://github.com/LN-Zap/lndconnect/releases/download/v0.2.0/lndconnect-linux-$LND_ARCH-v0.2.0.tar.gz
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    jq curl && rm -rf /var/lib/apt/lists/*
 
-RUN tar -xvf lndconnect-linux-$LND_ARCH-v0.2.0.tar.gz
-RUN install -m 0755 -o root -g root -t /usr/local/bin lndconnect-linux-$LND_ARCH-v0.2.0/lndconnect
-ADD entrypoints/lnd.sh /lnd.sh
-RUN chmod +x /lnd.sh
-RUN groupadd lnd -g$GID
-RUN adduser --disabled-password --uid $UID --gid $GID --home /data --gecos "" lnd
+# Copy verified binaries from builder
+COPY --from=verifier /tmp/lnd-linux-${LND_ARCH}-v${LND_VERSION}/lnd /usr/local/bin/
+COPY --from=verifier /tmp/lnd-linux-${LND_ARCH}-v${LND_VERSION}/lncli /usr/local/bin/
+COPY --from=verifier /tmp/lndconnect-linux-${LND_ARCH}-v0.2.0/lndconnect /usr/local/bin/
+
+# Copy entrypoint
+COPY entrypoints/lnd.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+# Create user with matching UID/GID
+RUN groupadd -g ${GID} lnd \
+    && useradd -u ${UID} -g ${GID} -m -d /data -s /bin/bash lnd
+
+EXPOSE 8080 9735
+
 USER lnd
-EXPOSE 8080
-ENTRYPOINT ["/lnd.sh"]
+
+HEALTHCHECK --interval=60s --timeout=10s --start-period=120s --retries=3 \
+    CMD lncli --network mainnet getinfo > /dev/null 2>&1 || exit 1
+
+ENTRYPOINT ["/entrypoint.sh"]

@@ -1,21 +1,41 @@
-FROM rust:1.63.0-slim-bullseye AS builder
-ARG ELECTRS_VERSION
-WORKDIR /build
-RUN apt-get update && apt-get install -y git clang cmake libsnappy-dev && rm -rf /var/lib/apt/lists/*
-RUN git clone --branch v$ELECTRS_VERSION https://github.com/romanz/electrs .
-# cargo under QEMU building for ARM can consumes 10s of GBs of RAM...
-# Solution: https://users.rust-lang.org/t/cargo-uses-too-much-memory-being-run-in-qemu/76531/2
-ENV CARGO_NET_GIT_FETCH_WITH_CLI true
-RUN cargo install --locked --path .
+# Awning v2: Electrs (Electrum Rust Server)
+# Multi-stage build compiled from source following RaspiBolt best practices
+# NOTE: Compilation can take up to 1 hour, especially on ARM under QEMU
 
+FROM rust:1.82-slim-bookworm AS builder
+ARG ELECTRS_VERSION
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git clang cmake libsnappy-dev pkg-config && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+
+# Clone the specific release tag
+RUN git clone --branch v${ELECTRS_VERSION} --depth 1 https://github.com/romanz/electrs .
+
+# Cargo under QEMU building for ARM can consume 10s of GBs of RAM
+# Solution: https://users.rust-lang.org/t/cargo-uses-too-much-memory-being-run-in-qemu/76531/2
+ENV CARGO_NET_GIT_FETCH_WITH_CLI=true
+
+# Build the release binary
+RUN cargo build --locked --release
+
+# --- Runtime image ---
 FROM debian:bookworm-slim
-ARG UID
-ARG GID
-RUN groupadd electrs -g$GID
-RUN adduser --disabled-password --uid $UID --gid $GID --home /data --gecos "" electrs
+ARG UID=1000
+ARG GID=1000
+
+# Create user with matching UID/GID
+RUN groupadd -g ${GID} electrs \
+    && useradd -u ${UID} -g ${GID} -m -d /data -s /bin/bash electrs
+
+# Copy the compiled binary
+COPY --from=builder /build/target/release/electrs /usr/local/bin/electrs
+
 USER electrs
 WORKDIR /data
-COPY --from=builder /usr/local/cargo/bin/electrs /bin/electrs
-EXPOSE 50001
-EXPOSE 4224
+
+EXPOSE 50001 4224
+
 ENTRYPOINT ["electrs"]
+CMD ["--conf", "/data/electrs.toml"]

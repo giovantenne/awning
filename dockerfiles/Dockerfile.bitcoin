@@ -1,21 +1,56 @@
+# Awning v2: Bitcoin Core
+# Multi-stage build with GPG verification following RaspiBolt best practices
+
+FROM debian:bookworm-slim AS verifier
+ARG BITCOIN_CORE_VERSION
+ARG BITCOIN_ARCH
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    wget ca-certificates gnupg curl && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /tmp
+
+# Download binary, checksums, and signatures
+RUN wget -q "https://bitcoincore.org/bin/bitcoin-core-${BITCOIN_CORE_VERSION}/bitcoin-${BITCOIN_CORE_VERSION}-${BITCOIN_ARCH}-linux-gnu.tar.gz" \
+    && wget -q "https://bitcoincore.org/bin/bitcoin-core-${BITCOIN_CORE_VERSION}/SHA256SUMS" \
+    && wget -q "https://bitcoincore.org/bin/bitcoin-core-${BITCOIN_CORE_VERSION}/SHA256SUMS.asc"
+
+# Verify checksum
+RUN sha256sum --ignore-missing --check SHA256SUMS
+
+# Import Bitcoin Core builder keys and verify signatures
+RUN curl -s "https://api.github.com/repositories/355107265/contents/builder-keys" \
+    | grep download_url | grep -oE "https://[a-zA-Z0-9./-]+" \
+    | while read url; do curl -s "$url" | gpg --import; done \
+    && gpg --verify SHA256SUMS.asc
+
+# Extract binaries
+RUN tar -xzf "bitcoin-${BITCOIN_CORE_VERSION}-${BITCOIN_ARCH}-linux-gnu.tar.gz"
+
+# --- Runtime image ---
 FROM debian:bookworm-slim
 ARG BITCOIN_CORE_VERSION
 ARG BITCOIN_ARCH
-ARG UID
-ARG GID
-RUN apt-get update && apt-get install -y wget curl jq bc gpg && rm -rf /var/lib/apt/lists/*
-RUN wget https://bitcoincore.org/bin/bitcoin-core-$BITCOIN_CORE_VERSION/bitcoin-$BITCOIN_CORE_VERSION-$BITCOIN_ARCH-linux-gnu.tar.gz && \
-  wget https://bitcoincore.org/bin/bitcoin-core-$BITCOIN_CORE_VERSION/SHA256SUMS && \
-  wget https://bitcoincore.org/bin/bitcoin-core-$BITCOIN_CORE_VERSION/SHA256SUMS.asc
-RUN sha256sum --ignore-missing --check SHA256SUMS
-RUN curl -s "https://api.github.com/repositories/355107265/contents/builder-keys" | grep download_url | grep -oE "https://[a-zA-Z0-9./-]+" | while read url; do curl -s "$url" | gpg --import; done
-RUN gpg --verify SHA256SUMS.asc
-RUN tar -zxvf bitcoin-$BITCOIN_CORE_VERSION-$BITCOIN_ARCH-linux-gnu.tar.gz
-RUN install -m 0755 -o root -g root -t /usr/local/bin bitcoin-$BITCOIN_CORE_VERSION/bin/*
-RUN groupadd bitcoin -g$GID
-RUN adduser --disabled-password --uid $UID --gid $GID --home /data --gecos "" bitcoin
-EXPOSE 8332
-EXPOSE 8333
-USER bitcoin
-ENTRYPOINT ["bitcoind"]
+ARG UID=1000
+ARG GID=1000
 
+# Only install runtime dependencies (jq for healthcheck/scripting)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    jq && rm -rf /var/lib/apt/lists/*
+
+# Copy only the binaries we need from the verified build
+COPY --from=verifier /tmp/bitcoin-${BITCOIN_CORE_VERSION}/bin/bitcoind /usr/local/bin/
+COPY --from=verifier /tmp/bitcoin-${BITCOIN_CORE_VERSION}/bin/bitcoin-cli /usr/local/bin/
+
+# Create user with matching UID/GID
+RUN groupadd -g ${GID} bitcoin \
+    && useradd -u ${UID} -g ${GID} -m -d /data -s /bin/bash bitcoin
+
+EXPOSE 8332 8333 28332 28333
+
+USER bitcoin
+
+HEALTHCHECK --interval=60s --timeout=10s --start-period=30s --retries=3 \
+    CMD bitcoin-cli -datadir=/data/.bitcoin getblockchaininfo > /dev/null 2>&1 || exit 1
+
+ENTRYPOINT ["bitcoind"]

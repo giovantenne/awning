@@ -1,11 +1,21 @@
+# Awning v2: Static Channel Backup watcher
+# Monitors LND channel.backup and pushes changes to a GitHub repository
+
 FROM debian:bookworm-slim
-ARG UID
-ARG GID
-RUN apt-get update && apt-get install -y inotify-tools git && rm -rf /var/lib/apt/lists/*
-RUN groupadd scb -g$GID
-RUN adduser --disabled-password --uid $UID --gid $GID --home /data --gecos "" scb
-ADD entrypoints/scb.sh /scb.sh
-RUN chmod +x /scb.sh
+ARG UID=1000
+ARG GID=1000
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    inotify-tools git openssh-client && rm -rf /var/lib/apt/lists/*
+
+# Create user with matching UID/GID
+RUN groupadd -g ${GID} scb \
+    && useradd -u ${UID} -g ${GID} -m -d /data -s /bin/bash scb
+
+COPY entrypoints/scb.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
 USER scb
 WORKDIR /data
-ENTRYPOINT ["/scb.sh"]
+
+ENTRYPOINT ["/entrypoint.sh"]
