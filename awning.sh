@@ -38,25 +38,24 @@ main() {
 
         # Service management
         start)
-            dc_up
-            log_success "Services started"
+            dc_start_services
             ;;
         stop)
             dc_down
-            log_success "Services stopped"
+            print_check "Services stopped"
             ;;
         restart)
             dc_restart "${@:2}"
-            log_success "Services restarted"
+            print_check "Services restarted"
             ;;
         build)
-            dc_build "${@:2}"
+            dc_build_services "${@:2}"
             ;;
         update)
             dc_down
-            dc_build
-            dc_up
-            log_success "Update complete"
+            dc_build_services
+            dc_start_services
+            print_check "Update complete"
             ;;
 
         # Monitoring
@@ -95,7 +94,8 @@ main() {
             ;;
 
         *)
-            log_error "Unknown command: $command"
+            print_fail "Unknown command: $command"
+            echo ""
             show_help
             exit 1
             ;;
@@ -103,32 +103,35 @@ main() {
 }
 
 show_help() {
-    echo -e "${BOLD}Awning v2${NC} - Bitcoin + Lightning Node Manager"
+    draw_header "AWNING v2.0" "Bitcoin + Lightning Node"
     echo ""
-    echo "Usage: ./awning.sh [command]"
+    echo -e "  ${BOLD}Usage:${NC} ./awning.sh [command]"
     echo ""
-    echo "Commands:"
-    echo "  (none)          Interactive menu (or setup wizard on first run)"
-    echo "  setup           Run the setup wizard"
+    echo -e "  ${BOLD}Commands:${NC}"
+    echo -e "    ${CYAN}(none)${NC}          Interactive menu (or setup on first run)"
+    echo -e "    ${CYAN}setup${NC}           Run the setup wizard"
     echo ""
-    echo "  start           Start all services"
-    echo "  stop            Stop all services"
-    echo "  restart [svc]   Restart services (optionally specify which)"
-    echo "  build [svc]     Build Docker images"
-    echo "  update          Rebuild and restart all services"
+    echo -e "  ${BOLD}Services:${NC}"
+    echo -e "    ${CYAN}start${NC}           Start all services"
+    echo -e "    ${CYAN}stop${NC}            Stop all services"
+    echo -e "    ${CYAN}restart${NC} [svc]   Restart services"
+    echo -e "    ${CYAN}build${NC} [svc]     Build Docker images"
+    echo -e "    ${CYAN}update${NC}          Rebuild and restart all"
     echo ""
-    echo "  status          Show service status and sync progress"
-    echo "  logs [svc]      Follow service logs"
-    echo "  connections     Show wallet connection info"
+    echo -e "  ${BOLD}Monitoring:${NC}"
+    echo -e "    ${CYAN}status${NC}          Service status and sync progress"
+    echo -e "    ${CYAN}logs${NC} [svc]      Follow service logs"
+    echo -e "    ${CYAN}connections${NC}     Wallet connection info"
     echo ""
-    echo "  wallet-create   Create LND wallet (first time)"
-    echo "  wallet-unlock   Manually unlock LND wallet"
-    echo "  zeus-connect    Generate Zeus wallet connection URI"
+    echo -e "  ${BOLD}Wallet:${NC}"
+    echo -e "    ${CYAN}wallet-create${NC}   Create LND wallet (first time)"
+    echo -e "    ${CYAN}wallet-unlock${NC}   Manually unlock LND wallet"
+    echo -e "    ${CYAN}zeus-connect${NC}    Generate Zeus connection URI"
     echo ""
-    echo "  bitcoin-cli     Run bitcoin-cli commands"
-    echo "  lncli           Run lncli commands"
+    echo -e "  ${BOLD}CLI:${NC}"
+    echo -e "    ${CYAN}bitcoin-cli${NC}     Run bitcoin-cli commands"
+    echo -e "    ${CYAN}lncli${NC}           Run lncli commands"
     echo ""
-    echo "  help            Show this help"
 }
 
 main "$@"
