@@ -1,0 +1,131 @@
+# Awning v2: Docker Compose
+# Static compose file - no more fragment generation
+
+networks:
+  awning_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+
+services:
+  # --- Tor SOCKS proxy and hidden services ---
+  tor:
+    build:
+      context: ./dockerfiles
+      dockerfile: Dockerfile.tor
+      args:
+        UID: ${UID}
+        GID: ${GID}
+    container_name: tor
+    restart: unless-stopped
+    networks:
+      - awning_net
+    volumes:
+      - ./configs/torrc:/etc/tor/torrc:ro
+      - ./data/tor:/var/lib/tor
+
+  # --- Bitcoin Core ---
+  bitcoin:
+    build:
+      context: ./dockerfiles
+      dockerfile: Dockerfile.bitcoin
+      args:
+        BITCOIN_CORE_VERSION: ${BITCOIN_CORE_VERSION}
+        BITCOIN_ARCH: ${BITCOIN_ARCH}
+        UID: ${UID}
+        GID: ${GID}
+    container_name: bitcoin
+    restart: unless-stopped
+    networks:
+      - awning_net
+    depends_on:
+      tor:
+        condition: service_healthy
+    volumes:
+      - ./configs/bitcoin.conf:/data/.bitcoin/bitcoin.conf:ro
+      - ./data/bitcoin:/data/.bitcoin
+    command: -datadir=/data/.bitcoin
+
+  # --- LND (Lightning Network Daemon) ---
+  lnd:
+    build:
+      context: ./dockerfiles
+      dockerfile: Dockerfile.lnd
+      args:
+        LND_VERSION: ${LND_VERSION}
+        LND_ARCH: ${LND_ARCH}
+        UID: ${UID}
+        GID: ${GID}
+    container_name: lnd
+    restart: unless-stopped
+    networks:
+      - awning_net
+    depends_on:
+      bitcoin:
+        condition: service_healthy
+      tor:
+        condition: service_healthy
+    ports:
+      - "8080:8080"   # REST API (TLS)
+    environment:
+      NODE_ALIAS: ${NODE_ALIAS}
+    volumes:
+      - ./configs/lnd.conf:/data/.lnd/lnd.conf:ro
+      - ./data/lnd:/data/.lnd
+
+  # --- Electrs (Electrum Rust Server) ---
+  electrs:
+    build:
+      context: ./dockerfiles
+      dockerfile: Dockerfile.electrs
+      args:
+        ELECTRS_VERSION: ${ELECTRS_VERSION}
+        UID: ${UID}
+        GID: ${GID}
+    container_name: electrs
+    restart: unless-stopped
+    networks:
+      - awning_net
+    depends_on:
+      bitcoin:
+        condition: service_healthy
+    volumes:
+      - ./configs/electrs.toml:/data/electrs.toml:ro
+      - ./data/electrs:/data/electrs_db
+
+  # --- Nginx SSL reverse proxy ---
+  nginx:
+    build:
+      context: ./dockerfiles
+      dockerfile: Dockerfile.nginx
+    container_name: nginx
+    restart: unless-stopped
+    networks:
+      - awning_net
+    depends_on:
+      electrs:
+        condition: service_started
+    ports:
+      - "50002:50002"  # Electrs SSL
+
+  # --- Static Channel Backup ---
+  scb:
+    build:
+      context: ./dockerfiles
+      dockerfile: Dockerfile.scb
+      args:
+        UID: ${UID}
+        GID: ${GID}
+    container_name: scb
+    restart: unless-stopped
+    networks:
+      - awning_net
+    depends_on:
+      lnd:
+        condition: service_healthy
+    environment:
+      SCB_REPO: ${SCB_REPO}
+    volumes:
+      - ./data/lnd:/lnd:ro
+      - ./data/scb:/data
