@@ -215,33 +215,58 @@ select_version_interactive() {
     local label="$1"
     local repo="$2"
     local fallback_latest="$3"
+    local current_value="${4:-}"
 
     local latest
     latest="$(fetch_latest_github_version "$repo" 2>/dev/null)" || latest="$fallback_latest"
 
     echo "" >&2
     echo -e "  ${BOLD}${label} version${NC}" >&2
-    echo -e "    1) Latest (${latest})" >&2
-    echo "    2) Custom version" >&2
-    echo "    3) Show recent releases" >&2
+    local default_choice=1
+    local custom_default="$latest"
+    if [[ -n "$current_value" ]]; then
+        echo -e "    1) Keep current (${current_value})" >&2
+        echo -e "    2) Latest (${latest})" >&2
+        echo "    3) Custom version" >&2
+        echo "    4) Show recent releases" >&2
+        custom_default="$current_value"
+    else
+        echo -e "    1) Latest (${latest})" >&2
+        echo "    2) Custom version" >&2
+        echo "    3) Show recent releases" >&2
+    fi
 
     while true; do
         local choice
-        read -r -p "  Choose [default 1]: " choice < /dev/tty
-        choice="${choice:-1}"
+        read -r -p "  Choose [default ${default_choice}]: " choice < /dev/tty
+        choice="${choice:-$default_choice}"
 
         case "$choice" in
             1)
-                echo "$latest"
+                if [[ -n "$current_value" ]]; then
+                    echo "$current_value"
+                else
+                    echo "$latest"
+                fi
                 return
                 ;;
             2)
+                if [[ -n "$current_value" ]]; then
+                    echo "$latest"
+                    return
+                fi
                 local custom
-                read -r -p "  Enter ${label} version [${latest}]: " custom < /dev/tty
-                echo "${custom:-$latest}"
+                read -r -p "  Enter ${label} version [${custom_default}]: " custom < /dev/tty
+                echo "${custom:-$custom_default}"
                 return
                 ;;
             3)
+                if [[ -n "$current_value" ]]; then
+                    local custom
+                    read -r -p "  Enter ${label} version [${custom_default}]: " custom < /dev/tty
+                    echo "${custom:-$custom_default}"
+                    return
+                fi
                 local versions
                 versions="$(fetch_github_versions "$repo" 8 2>/dev/null)" || true
                 if [[ -z "$versions" ]]; then
@@ -251,7 +276,24 @@ select_version_interactive() {
                 fi
                 local version_list
                 readarray -t version_list <<< "$versions"
-                choose_version_from_list "$label" "$latest" "${version_list[@]}"
+                choose_version_from_list "$label" "$custom_default" "${version_list[@]}"
+                return
+                ;;
+            4)
+                if [[ -z "$current_value" ]]; then
+                    print_warn "Invalid selection" >&2
+                    continue
+                fi
+                local versions
+                versions="$(fetch_github_versions "$repo" 8 2>/dev/null)" || true
+                if [[ -z "$versions" ]]; then
+                    print_warn "Could not fetch recent ${label} releases, using latest (${latest})" >&2
+                    echo "$latest"
+                    return
+                fi
+                local version_list
+                readarray -t version_list <<< "$versions"
+                choose_version_from_list "$label" "$custom_default" "${version_list[@]}"
                 return
                 ;;
             *)
@@ -286,8 +328,10 @@ step_node_config() {
 
     # Node alias
     local node_alias
+    local current_alias
+    current_alias="${NODE_ALIAS:-AwningNode}"
     while true; do
-        node_alias="$(read_input "Enter LND alias" "AwningNode")"
+        node_alias="$(read_input "Enter LND alias" "$current_alias")"
         if validate_node_alias "$node_alias"; then
             break
         fi
@@ -295,9 +339,9 @@ step_node_config() {
 
     # Versions (default to latest; fetch full release list only on explicit request)
     local btc_version lnd_version electrs_version
-    btc_version="$(select_version_interactive "Bitcoin Core" "bitcoin/bitcoin" "29.1")"
-    lnd_version="$(select_version_interactive "LND" "lightningnetwork/lnd" "0.19.3-beta")"
-    electrs_version="$(select_version_interactive "Electrs" "romanz/electrs" "0.10.10")"
+    btc_version="$(select_version_interactive "Bitcoin Core" "bitcoin/bitcoin" "29.1" "${BITCOIN_CORE_VERSION:-}")"
+    lnd_version="$(select_version_interactive "LND" "lightningnetwork/lnd" "0.19.3-beta" "${LND_VERSION:-}")"
+    electrs_version="$(select_version_interactive "Electrs" "romanz/electrs" "0.10.10" "${ELECTRS_VERSION:-}")"
 
     # Save to .env (UID/GID/ARCH auto-detected, not user-editable)
     local env_file
@@ -342,16 +386,27 @@ step_scb_config() {
     print_info "You need a private GitHub repository and an SSH deploy key."
     echo ""
 
-    if confirm "Enable Static Channel Backup?" "y"; then
+    local existing_scb_repo="${SCB_REPO:-}"
+    local default_enable="y"
+    if [[ -n "$existing_scb_repo" ]]; then
+        print_info "Current SCB repository: ${CYAN}${existing_scb_repo}${NC}"
+    fi
+
+    if confirm "Enable Static Channel Backup?" "$default_enable"; then
         local scb_repo
         print_info "Need a private GitHub repo? Create one at: ${CYAN}https://github.com/new${NC}"
         while true; do
-            scb_repo="$(read_input "GitHub SSH URL (e.g. git@github.com:user/lnd-backup.git)" "")"
+            scb_repo="$(read_input "GitHub SSH URL (e.g. git@github.com:user/lnd-backup.git)" "$existing_scb_repo")"
             if [[ -z "$scb_repo" ]]; then
-                print_warn "No repository provided, SCB will be disabled"
-                echo "SCB_REPO=" >> "$(awning_path .env)"
-                export SCB_REPO=""
-                return
+                if [[ -n "$existing_scb_repo" ]]; then
+                    scb_repo="$existing_scb_repo"
+                    print_info "Keeping existing SCB repository"
+                else
+                    print_warn "No repository provided, SCB will be disabled"
+                    echo "SCB_REPO=" >> "$(awning_path .env)"
+                    export SCB_REPO=""
+                    return
+                fi
             fi
             if validate_scb_repo "$scb_repo"; then
                 break
@@ -437,11 +492,11 @@ step_scb_config() {
                     fi
 
                     printf '\r\033[K'
-                    print_warn "Write access test failed"
+                    print_fail "SSH write access test failed"
                     if echo "$push_test" | grep -qi "Permission denied"; then
-                        print_info "Deploy key likely missing or without write access."
+                        print_fail "Deploy key missing or write access not enabled."
                     fi
-                    print_info "After fixing the deploy key, press Enter to test again."
+                    print_fail "Fix the deploy key, then press Enter to test again."
                 done
             else
                 print_info "git/ssh client not on host; SCB container will test connectivity on startup"
@@ -460,11 +515,21 @@ step_scb_config() {
 step_generate_configs() {
     print_step "Step 3/6: Generating Configuration"
 
-    # Generate random credentials
+    # Keep existing credentials on setup rerun to avoid RPC auth mismatches.
     local rpc_user rpc_password tor_password
-    rpc_user="awning"
-    rpc_password="$(generate_password 32)"
-    tor_password="$(generate_password 32)"
+    rpc_user="${BITCOIN_RPC_USER:-awning}"
+    if [[ -n "${BITCOIN_RPC_PASSWORD:-}" ]]; then
+        rpc_password="${BITCOIN_RPC_PASSWORD}"
+        print_info "Reusing existing Bitcoin RPC password"
+    else
+        rpc_password="$(generate_password 32)"
+    fi
+    if [[ -n "${TOR_CONTROL_PASSWORD:-}" ]]; then
+        tor_password="${TOR_CONTROL_PASSWORD}"
+        print_info "Reusing existing Tor control password"
+    else
+        tor_password="$(generate_password 32)"
+    fi
 
     # Append to .env
     local env_file

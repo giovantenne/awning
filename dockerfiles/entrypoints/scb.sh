@@ -8,8 +8,10 @@ set -euo pipefail
 SCB_SOURCE="/lnd/data/chain/bitcoin/mainnet/channel.backup"
 BACKUP_DIR="/data/backups"
 MAX_RETRY_DELAY=300  # 5 minutes max between retries
+HEARTBEAT_FILE="/tmp/scb_heartbeat"
 
 log() { echo "[SCB] $(date '+%H:%M:%S') $*"; }
+heartbeat() { date +%s > "${HEARTBEAT_FILE}"; }
 
 # --- SSH key setup ---
 if [ ! -f /data/.ssh/id_ed25519 ]; then
@@ -99,15 +101,19 @@ push_backup() {
 
 # --- Main loop ---
 setup_repo
+heartbeat
 
 log "Watching for channel.backup changes..."
 while true; do
     if [ -f "${SCB_SOURCE}" ]; then
+        heartbeat
         inotifywait -q -e modify,create "${SCB_SOURCE}"
         log "channel.backup changed, backing up..."
         push_backup || log "WARNING: Backup failed, will retry on next change"
+        heartbeat
     else
         log "Waiting for LND to create channel.backup..."
+        heartbeat
         sleep 30
     fi
 done

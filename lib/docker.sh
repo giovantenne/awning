@@ -135,6 +135,20 @@ dc_start_services() {
         read -ra services <<< "$(active_services)"
     fi
 
+    # Avoid redundant startup when everything is already running.
+    local pending=()
+    local service
+    for service in "${services[@]}"; do
+        if ! is_running "$service" 2>/dev/null; then
+            pending+=("$service")
+        fi
+    done
+    if [[ ${#pending[@]} -eq 0 ]]; then
+        print_info "All services are already running"
+        return 0
+    fi
+    services=("${pending[@]}")
+
     print_step "Starting services..."
     echo ""
 

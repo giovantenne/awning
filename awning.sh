@@ -51,7 +51,9 @@ main() {
 
     # If no .env exists and no command given, run setup wizard
     if [[ -z "$command" && ! -f "$env_file" ]]; then
-        run_setup
+        if run_setup; then
+            show_menu
+        fi
         return
     fi
 
@@ -88,7 +90,9 @@ main() {
                     return 1
                     ;;
             esac
-            run_setup "$setup_ignore_disk_space"
+            if run_setup "$setup_ignore_disk_space"; then
+                show_menu
+            fi
             ;;
 
         # Service management

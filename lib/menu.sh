@@ -76,6 +76,12 @@ menu_logs() {
         *) return ;;
     esac
 
+    if [[ -n "$service" ]] && ! is_running "$service" 2>/dev/null; then
+        print_warn "Selected service is not running"
+        menu_pause
+        return
+    fi
+
     echo ""
     print_info "Showing logs (Ctrl+C to exit)..."
     # Use trap to catch Ctrl+C gracefully instead of killing the script

@@ -18,19 +18,26 @@ show_status() {
     for service in "${services[@]}"; do
         local status
         status="$(_dc ps --format '{{.Status}}' "$service" 2>/dev/null)" || status=""
+        local detail
+        detail="$status"
 
         if [[ -z "$status" ]]; then
             printf "  %-10s ${RED}%-12s${NC} %s\n" "$service" "not found" ""
         elif echo "$status" | grep -qi "restarting"; then
-            printf "  %-10s ${YELLOW}%-12s${NC} %s\n" "$service" "restarting" "$status"
+            detail="$(echo "$status" | sed -E 's/[[:space:]]*\(restarting\)//I')"
+            printf "  %-10s ${YELLOW}%-12s${NC} %s\n" "$service" "restarting" "$detail"
         elif echo "$status" | grep -qi "unhealthy"; then
-            printf "  %-10s ${RED}%-12s${NC} %s\n" "$service" "unhealthy" "$status"
+            detail="$(echo "$status" | sed -E 's/[[:space:]]*\(unhealthy\)//I')"
+            printf "  %-10s ${RED}%-12s${NC} %s\n" "$service" "unhealthy" "$detail"
         elif echo "$status" | grep -qi "healthy"; then
-            printf "  %-10s ${GREEN}%-12s${NC} %s\n" "$service" "healthy" "$status"
+            detail="$(echo "$status" | sed -E 's/[[:space:]]*\(healthy\)//I')"
+            printf "  %-10s ${GREEN}%-12s${NC} %s\n" "$service" "healthy" "$detail"
         elif echo "$status" | grep -qi "starting"; then
-            printf "  %-10s ${YELLOW}%-12s${NC} %s\n" "$service" "starting" "$status"
+            detail="$(echo "$status" | sed -E 's/[[:space:]]*\(health: starting\)//I; s/[[:space:]]*\(starting\)//I')"
+            printf "  %-10s ${YELLOW}%-12s${NC} %s\n" "$service" "starting" "$detail"
         elif echo "$status" | grep -qi "up\|running"; then
-            printf "  %-10s ${GREEN}%-12s${NC} %s\n" "$service" "running" "$status"
+            detail="$(echo "$status" | sed -E 's/[[:space:]]*\(running\)//I')"
+            printf "  %-10s ${GREEN}%-12s${NC} %s\n" "$service" "running" "$detail"
         else
             printf "  %-10s ${RED}%-12s${NC} %s\n" "$service" "error" "$status"
         fi

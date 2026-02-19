@@ -18,4 +18,7 @@ RUN chmod +x /entrypoint.sh
 USER scb
 WORKDIR /data
 
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD sh -c 'test -f /tmp/scb_heartbeat && now=$(date +%s) && hb=$(cat /tmp/scb_heartbeat) && [ $((now - hb)) -lt 120 ]'
+
 ENTRYPOINT ["/entrypoint.sh"]
