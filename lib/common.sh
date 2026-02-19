@@ -2,24 +2,34 @@
 # Awning v2: Common utilities
 # UI primitives, box drawing, logging, user interaction, and error handling
 
+# --- Constants ---
+MIN_PASSWORD_LENGTH=8
+LND_REST_DEFAULT_PORT=8080
+ELECTRS_TCP_PORT=50001
+BITCOIN_NETWORK="mainnet"
+ADMIN_MACAROON_SUBPATH="data/chain/bitcoin/mainnet/admin.macaroon"
+
 # --- Colors ---
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[0;33m'
-BLUE='\033[0;34m'
-CYAN='\033[0;36m'
-MAGENTA='\033[0;35m'
-BOLD='\033[1m'
-DIM='\033[2m'
-NC='\033[0m' # No Color
+# Respect NO_COLOR convention (https://no-color.org/) and dumb terminals
+if [[ -n "${NO_COLOR:-}" ]] || [[ "${TERM:-}" == "dumb" ]] || ! [[ -t 1 ]]; then
+    RED='' GREEN='' YELLOW='' BLUE='' CYAN='' BOLD='' DIM='' NC=''
+else
+    RED='\033[0;31m'
+    GREEN='\033[0;32m'
+    YELLOW='\033[0;33m'
+    BLUE='\033[0;34m'
+    CYAN='\033[0;36m'
+    BOLD='\033[1m'
+    DIM='\033[2m'
+    NC='\033[0m' # No Color
+fi
 
 # --- Unicode icons ---
 ICON_OK="${GREEN}\xe2\x9c\x93${NC}"       # ✓
 ICON_FAIL="${RED}\xe2\x9c\x97${NC}"       # ✗
 ICON_BOLT="\xe2\x9a\xa1"                  # ⚡
 ICON_WARN="${YELLOW}\xe2\x9a\xa0${NC}"    # ⚠
-ICON_ARROW="${CYAN}\xe2\x96\xb6${NC}"     # ▶
-ICON_DOT="${DIM}\xe2\x94\x82${NC}"        # │ (for indented lines)
+
 BAR_FILLED="\xe2\x96\x93"                 # ▓
 BAR_EMPTY="\xe2\x96\x91"                  # ░
 
@@ -55,7 +65,10 @@ draw_line() {
 draw_header() {
     local title="$1"
     local subtitle="${2:-}"
+    local tw
+    tw="$(term_width)"
     local width=39
+    [[ $tw -lt $((width + 4)) ]] && width=$((tw - 4))
 
     echo ""
     # Top border
@@ -92,11 +105,13 @@ draw_header() {
 draw_content_box() {
     local label="$1"
     local content="$2"
+    local tw
+    tw="$(term_width)"
     local width=42
+    [[ $tw -lt $((width + 4)) ]] && width=$((tw - 4))
 
     # Ensure content fits (truncate if necessary)
     local display_content="$content"
-    local content_len=${#content}
     local inner=$((width - 2))
 
     echo ""
@@ -128,7 +143,10 @@ draw_content_box() {
 # Usage: draw_info_box "line1" "line2" "line3"
 draw_info_box() {
     local lines=("$@")
+    local tw
+    tw="$(term_width)"
     local width=42
+    [[ $tw -lt $((width + 4)) ]] && width=$((tw - 4))
 
     # Find max line length
     local max_len=0
@@ -168,13 +186,6 @@ print_info()  { echo -e "  ${DIM}$*${NC}"; }
 print_warn()  { echo -e "  [${ICON_WARN}] $*"; }
 print_step()  { echo -e "\n${BOLD}${CYAN}$*${NC}"; }
 
-# Legacy-compatible logging (still used in some places)
-log_info()    { echo -e "  ${BLUE}${BOLD}i${NC} $*"; }
-log_success() { print_check "$@"; }
-log_warn()    { print_warn "$@"; }
-log_error()   { echo -e "  [${ICON_FAIL}] $*" >&2; }
-log_step()    { print_step "$@"; }
-
 # --- Progress bar ---
 # Usage: progress_bar 45 100 30  (value, max, bar_width)
 # Or:    progress_bar 0.45 1 30  (fraction)
@@ -185,6 +196,12 @@ progress_bar() {
     local label="${4:-}"
 
     local pct filled empty
+
+    # Guard against division by zero
+    if [[ "$max" == "0" ]]; then
+        max=1
+        value=0
+    fi
 
     if [[ "$max" == "1" ]]; then
         pct="$(echo "$value" | awk '{printf "%.1f", $1 * 100}')"
@@ -298,12 +315,6 @@ generate_password() {
     tr -dc 'A-Za-z0-9' < /dev/urandom | head -c "$length"
 }
 
-# --- Error handling ---
-setup_traps() {
-    set -euo pipefail
-    trap 'log_error "Command failed at line $LINENO: $BASH_COMMAND"; exit 1' ERR
-}
-
 # --- Prerequisites check ---
 check_command() {
     local cmd="$1"
@@ -325,9 +336,9 @@ count_running_services() {
     local count=0
     local service
     local services
-    read -ra services <<< "$(active_services)"
+    read -ra services <<< "$(dc_active_services)"
     for service in "${services[@]}"; do
-        if is_running "$service" 2>/dev/null; then
+        if dc_is_running "$service" 2>/dev/null; then
             count=$((count + 1))
         fi
     done
@@ -344,7 +355,7 @@ get_status_label() {
     local running total
     running="$(count_running_services)"
     local svc_list
-    read -ra svc_list <<< "$(active_services)"
+    read -ra svc_list <<< "$(dc_active_services)"
     total=${#svc_list[@]}
 
     if [[ "$running" -ge "$total" ]]; then

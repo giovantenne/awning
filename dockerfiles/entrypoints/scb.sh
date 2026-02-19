@@ -26,7 +26,7 @@ start_heartbeat_loop() {
 }
 
 cleanup() {
-    if [ -n "${HEARTBEAT_PID}" ] && kill -0 "${HEARTBEAT_PID}" 2>/dev/null; then
+    if [[ -n "${HEARTBEAT_PID}" ]] && kill -0 "${HEARTBEAT_PID}" 2>/dev/null; then
         kill "${HEARTBEAT_PID}" 2>/dev/null || true
     fi
 }
@@ -34,9 +34,9 @@ trap cleanup EXIT INT TERM
 
 # --- SSH key setup ---
 mkdir -p /data/.ssh
-if [ -f /data/.ssh/id_rsa ]; then
+if [[ -f /data/.ssh/id_rsa ]]; then
     SSH_KEY="/data/.ssh/id_rsa"
-elif [ -f /data/.ssh/id_ed25519 ]; then
+elif [[ -f /data/.ssh/id_ed25519 ]]; then
     SSH_KEY="/data/.ssh/id_ed25519"
 else
     log "Generating SSH key..."
@@ -44,7 +44,7 @@ else
     SSH_KEY="/data/.ssh/id_ed25519"
 fi
 
-if [ ! -f "${SSH_KEY}.pub" ]; then
+if [[ ! -f "${SSH_KEY}.pub" ]]; then
     ssh-keygen -y -f "${SSH_KEY}" > "${SSH_KEY}.pub" 2>/dev/null || true
 fi
 
@@ -73,12 +73,12 @@ git config --global user.name "Awning SCB"
 
 # --- Clone or update repo ---
 setup_repo() {
-    if [ -z "${SCB_REPO:-}" ]; then
+    if [[ -z "${SCB_REPO:-}" ]]; then
         log "SCB_REPO not set, channel backup disabled. Exiting."
         exit 0
     fi
 
-    if [ ! -d "${BACKUP_DIR}/.git" ]; then
+    if [[ ! -d "${BACKUP_DIR}/.git" ]]; then
         log "Cloning backup repository..."
         local delay=5
         while ! git clone "${SCB_REPO}" "${BACKUP_DIR}" 2>&1; do
@@ -132,7 +132,7 @@ start_heartbeat_loop
 
 log "Watching for channel.backup changes..."
 while true; do
-    if [ -f "${SCB_SOURCE}" ]; then
+    if [[ -f "${SCB_SOURCE}" ]]; then
         # Keep waiting even if the file is rotated/replaced by LND.
         while ! inotifywait -q -e modify,create,move,delete_self "${SCB_SOURCE}"; do
             log "inotify watch interrupted, retrying in 3s..."

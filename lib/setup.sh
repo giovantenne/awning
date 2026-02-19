@@ -3,6 +3,25 @@
 # Guided setup with polished terminal UI
 # Only requirement: Docker (with compose plugin)
 
+# --- Setup constants ---
+REQUIRED_DISK_GB=900
+FALLBACK_BITCOIN_VERSION="29.1"
+FALLBACK_LND_VERSION="0.19.3-beta"
+FALLBACK_ELECTRS_VERSION="0.10.10"
+
+# Update or append a KEY=VALUE pair in a .env file.
+# If the key already exists, its value is replaced in-place.
+# If not, the line is appended.
+# Args: $1=file  $2=key  $3=value
+_env_set() {
+    local file="$1" key="$2" value="$3"
+    if grep -q "^${key}=" "$file" 2>/dev/null; then
+        sed -i "s|^${key}=.*|${key}=${value}|" "$file"
+    else
+        echo "${key}=${value}" >> "$file"
+    fi
+}
+
 run_setup() {
     local ignore_disk_space="${1:-0}"
     draw_header "AWNING SETUP" "Bitcoin + Lightning Node"
@@ -78,7 +97,7 @@ step_prerequisites() {
     existing_bitcoin_kb="${existing_bitcoin_kb:-0}"
     existing_bitcoin_gb="$(echo "$existing_bitcoin_kb" | awk '{printf "%.1f", $1 / 1048576}')"
 
-    required_free_kb=$((900 * 1048576 - existing_bitcoin_kb))
+    required_free_kb=$((REQUIRED_DISK_GB * 1048576 - existing_bitcoin_kb))
     if [[ "$required_free_kb" -lt 0 ]]; then
         required_free_kb=0
     fi
@@ -104,8 +123,8 @@ step_prerequisites() {
 
     if [[ $missing -ne 0 ]]; then
         echo ""
-        log_error "Please install missing prerequisites and re-run setup"
-        exit 1
+        print_fail "Please install missing prerequisites and re-run setup"
+        return 1
     fi
 
     echo ""
@@ -170,6 +189,13 @@ validate_scb_repo() {
     return 0
 }
 
+# Fetch recent release versions from a GitHub repository.
+# Spins up a disposable python:3-slim Docker container to query the API.
+# Args:
+#   $1 - GitHub repo (e.g. "bitcoin/bitcoin")
+#   $2 - Number of releases to return (default: 5)
+# Output: One version per line on stdout (stripped of leading "v")
+# Returns: 1 if no versions could be fetched
 fetch_github_versions() {
     local repo="$1"
     local limit="${2:-5}"
@@ -202,28 +228,20 @@ PY
     echo "$output"
 }
 
+# Fetch the latest release version for a GitHub repo.
+# Delegates to fetch_github_versions with limit=1.
 fetch_latest_github_version() {
     local repo="$1"
-    local output=""
-
-    output="$(_docker run --rm -i python:3-slim python3 - "$repo" <<'PY'
-import json, sys, urllib.request
-repo = sys.argv[1]
-url = f"https://api.github.com/repos/{repo}/releases/latest"
-req = urllib.request.Request(url, headers={"User-Agent": "awning-setup"})
-with urllib.request.urlopen(req, timeout=10) as r:
-    data = json.load(r)
-tag = data.get("tag_name", "")
-if tag.startswith("v"):
-    tag = tag[1:]
-print(tag)
-PY
-)" || true
-
-    [[ -n "$output" ]] || return 1
-    echo "$output"
+    fetch_github_versions "$repo" 1 | head -1
 }
 
+# Interactive version selector with latest/custom/list options.
+# Args:
+#   $1 - Human-readable label (e.g. "Bitcoin Core")
+#   $2 - GitHub repo (e.g. "bitcoin/bitcoin")
+#   $3 - Fallback version if GitHub is unreachable
+#   $4 - Current version (optional, enables "Keep current" option)
+# Output: Selected version string on stdout
 select_version_interactive() {
     local label="$1"
     local repo="$2"
@@ -327,8 +345,8 @@ step_node_config() {
         x86_64)  bitcoin_arch="x86_64"; lnd_arch="amd64" ;;
         aarch64) bitcoin_arch="aarch64"; lnd_arch="arm64" ;;
         *)
-            log_error "Unsupported architecture: $arch"
-            exit 1
+            print_fail "Unsupported architecture: $arch"
+            return 1
             ;;
     esac
     print_info "Architecture: ${arch} (auto-detected)"
@@ -352,9 +370,9 @@ step_node_config() {
 
     # Versions (default to latest; fetch full release list only on explicit request)
     local btc_version lnd_version electrs_version
-    btc_version="$(select_version_interactive "Bitcoin Core" "bitcoin/bitcoin" "29.1" "${BITCOIN_CORE_VERSION:-}")"
-    lnd_version="$(select_version_interactive "LND" "lightningnetwork/lnd" "0.19.3-beta" "${LND_VERSION:-}")"
-    electrs_version="$(select_version_interactive "Electrs" "romanz/electrs" "0.10.10" "${ELECTRS_VERSION:-}")"
+    btc_version="$(select_version_interactive "Bitcoin Core" "bitcoin/bitcoin" "$FALLBACK_BITCOIN_VERSION" "${BITCOIN_CORE_VERSION:-}")"
+    lnd_version="$(select_version_interactive "LND" "lightningnetwork/lnd" "$FALLBACK_LND_VERSION" "${LND_VERSION:-}")"
+    electrs_version="$(select_version_interactive "Electrs" "romanz/electrs" "$FALLBACK_ELECTRS_VERSION" "${ELECTRS_VERSION:-}")"
 
     # Save to .env (UID/GID/ARCH auto-detected, not user-editable)
     local env_file
@@ -416,7 +434,7 @@ step_scb_config() {
                     print_info "Keeping existing SCB repository"
                 else
                     print_warn "No repository provided, SCB will be disabled"
-                    echo "SCB_REPO=" >> "$(awning_path .env)"
+                    _env_set "$(awning_path .env)" "SCB_REPO" ""
                     export SCB_REPO=""
                     return
                 fi
@@ -427,7 +445,7 @@ step_scb_config() {
             print_info "Please enter a valid SSH URL or leave blank to disable SCB."
         done
 
-        echo "SCB_REPO=${scb_repo}" >> "$(awning_path .env)"
+        _env_set "$(awning_path .env)" "SCB_REPO" "$scb_repo"
         export SCB_REPO="${scb_repo}"
 
         # Generate SSH key using Docker (no ssh-keygen needed on host)
@@ -542,7 +560,7 @@ step_scb_config() {
             fi
         fi
     else
-        echo "SCB_REPO=" >> "$(awning_path .env)"
+        _env_set "$(awning_path .env)" "SCB_REPO" ""
         export SCB_REPO=""
         print_info "SCB disabled"
     fi
@@ -570,16 +588,12 @@ step_generate_configs() {
         tor_password="$(generate_password 32)"
     fi
 
-    # Append to .env
+    # Update credentials in .env (upsert to avoid duplicates on rerun)
     local env_file
     env_file="$(awning_path .env)"
-    cat >> "$env_file" <<EOF
-
-# Credentials (auto-generated, do not edit)
-BITCOIN_RPC_USER=${rpc_user}
-BITCOIN_RPC_PASSWORD=${rpc_password}
-TOR_CONTROL_PASSWORD=${tor_password}
-EOF
+    _env_set "$env_file" "BITCOIN_RPC_USER" "$rpc_user"
+    _env_set "$env_file" "BITCOIN_RPC_PASSWORD" "$rpc_password"
+    _env_set "$env_file" "TOR_CONTROL_PASSWORD" "$tor_password"
 
     # Generate Bitcoin rpcauth line (via Docker if openssl not on host)
     local rpcauth_line
@@ -627,8 +641,13 @@ EOF
     done
 }
 
-# Generate rpcauth line compatible with Bitcoin Core
-# Uses openssl on host if available, otherwise runs via Docker with Python
+# Generate rpcauth line compatible with Bitcoin Core.
+# Uses openssl on host if available, otherwise runs via Docker with Python.
+# Args:
+#   $1 - RPC username
+#   $2 - RPC password (plaintext)
+# Output: rpcauth=<user>:<salt>$<hmac> on stdout
+# Returns: 1 on failure
 generate_rpcauth() {
     local user="$1"
     local password="$2"
@@ -654,14 +673,18 @@ PY
     fi
 
     if [[ -z "$salt" || -z "$hmac" ]]; then
-        log_error "Failed to generate RPC auth credentials"
-        exit 1
+        print_fail "Failed to generate RPC auth credentials"
+        return 1
     fi
 
     echo "rpcauth=${user}:${salt}\$${hmac}"
 }
 
-# Generate Tor hashed control password via Docker
+# Generate Tor hashed control password via Docker.
+# Args:
+#   $1 - Tor control password (plaintext)
+# Output: Hashed password string (16:...) on stdout
+# Returns: 1 on failure
 generate_tor_hash() {
     local password="$1"
     local hash
@@ -682,8 +705,8 @@ PY
 )" || true
 
     if [[ -z "$hash" ]]; then
-        log_error "Failed to generate Tor password hash"
-        exit 1
+        print_fail "Failed to generate Tor password hash"
+        return 1
     fi
 
     echo "$hash"
@@ -725,17 +748,17 @@ step_initialize_wallet() {
     echo ""
 
     local macaroon
-    macaroon="$(awning_path data/lnd/data/chain/bitcoin/mainnet/admin.macaroon)"
+    macaroon="$(awning_path "data/lnd/${ADMIN_MACAROON_SUBPATH}")"
     if [[ -f "$macaroon" ]]; then
         print_info "Wallet already initialized, skipping."
         return 0
     fi
 
-    if ! is_running lnd; then
+    if ! dc_is_running lnd; then
         print_warn "LND is not running. Attempting to start required services..."
         dc_start_services lnd >/dev/null 2>&1 || true
         sleep 2
-        if ! is_running lnd; then
+        if ! dc_is_running lnd; then
             print_warn "LND is still not running, wallet initialization skipped."
             print_info "Check logs with: ${CYAN}./awning.sh logs lnd${NC}"
             return 0
@@ -753,7 +776,7 @@ step_initialize_wallet() {
     print_info "Use the same password you will enter in wallet creation."
     while true; do
         lnd_password="$(read_password "LND auto-unlock password")"
-        if validate_password "$lnd_password" 8; then
+        if validate_password "$lnd_password" "$MIN_PASSWORD_LENGTH"; then
             break
         fi
     done

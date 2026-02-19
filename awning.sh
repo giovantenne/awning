@@ -130,28 +130,13 @@ main() {
 
         # Wallet
         wallet-balance)
-            if has_admin_macaroon; then
-                show_wallet_balance_ui
-            else
-                print_warn "Wallet not initialized yet. Run setup first."
-                return 1
-            fi
+            require_wallet && show_wallet_balance_ui
             ;;
         channel-balance)
-            if has_admin_macaroon; then
-                show_channel_balance_ui
-            else
-                print_warn "Wallet not initialized yet. Run setup first."
-                return 1
-            fi
+            require_wallet && show_channel_balance_ui
             ;;
         new-address)
-            if has_admin_macaroon; then
-                show_new_address_ui
-            else
-                print_warn "Wallet not initialized yet. Run setup first."
-                return 1
-            fi
+            require_wallet && show_new_address_ui
             ;;
         zeus-connect)
             zeus_connect

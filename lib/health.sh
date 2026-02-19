@@ -13,7 +13,7 @@ show_status() {
 
     local services
     local bitcoin_wait_detail=""
-    if is_running bitcoin 2>/dev/null; then
+    if dc_is_running bitcoin 2>/dev/null; then
         local binfo bprogress bblocks bheaders bibd bpct
         binfo="$(bitcoin_cli getblockchaininfo 2>/dev/null)" || binfo=""
         if [[ -n "$binfo" ]]; then
@@ -28,13 +28,13 @@ show_status() {
         fi
     fi
 
-    read -ra services <<< "$(active_services)"
+    read -ra services <<< "$(dc_active_services)"
     printf "  %-10s %-12s %s\n" "SERVICE" "STATE" "DETAILS"
     echo -e "  ${DIM}---------------------------------------------${NC}"
     for service in "${services[@]}"; do
         local status health detail state_label
-        status="$(_docker inspect --format '{{.State.Status}}' "$service" 2>/dev/null)" || status=""
-        health="$(_docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$service" 2>/dev/null)" || health=""
+        status="$(dc_get_status "$service")"
+        health="$(dc_get_health "$service")"
         detail=""
         state_label=""
 
@@ -85,17 +85,17 @@ show_status() {
     echo ""
 
     # Bitcoin sync status
-    if is_running bitcoin; then
+    if dc_is_running bitcoin; then
         show_bitcoin_status
     fi
 
     # LND status
-    if is_running lnd; then
+    if dc_is_running lnd; then
         show_lnd_status
     fi
 
     # Electrs status
-    if is_running electrs; then
+    if dc_is_running electrs; then
         show_electrs_status
     fi
 }
@@ -129,10 +129,9 @@ show_bitcoin_status() {
     echo -e "    Blocks:  ${blocks} / ${headers}"
     echo -e "    Size:    ${size_gb} GB"
 
-    # Progress bar
+    # Progress bar (progress_bar already outputs a trailing newline)
     printf '  '
     progress_bar "$progress" 1 30 ""
-    printf '\n' # extra line after section
 
     # Peer info
     local peers
@@ -184,7 +183,8 @@ show_lnd_status() {
 # Electrs status with indexing progress (best effort from logs)
 show_electrs_status() {
     local health
-    health="$(_docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}unknown{{end}}' electrs 2>/dev/null)" || health="unknown"
+    health="$(dc_get_health electrs)"
+    [[ -z "$health" ]] && health="unknown"
 
     local logs last_chain_line last_index_line electrs_height electrs_tip index_range
     logs="$(_docker logs --tail 200 electrs 2>/dev/null)" || logs=""
@@ -220,7 +220,7 @@ show_electrs_status() {
         availability_detail="syncing"
     fi
 
-    if [[ -n "$electrs_height" ]] && is_running bitcoin 2>/dev/null; then
+    if [[ -n "$electrs_height" ]] && dc_is_running bitcoin 2>/dev/null; then
         local binfo bheight pct
         binfo="$(bitcoin_cli getblockchaininfo 2>/dev/null)" || binfo=""
         bheight="$(echo "$binfo" | jq -r '.blocks // empty' 2>/dev/null)" || bheight=""
@@ -277,7 +277,7 @@ show_tor_status() {
     # LND REST
     local lnd_onion="${tor_data}/hidden_service_lnd_rest/hostname"
     if [[ -f "$lnd_onion" ]]; then
-        echo -e "    LND REST:  $(cat "$lnd_onion"):8080"
+        echo -e "    LND REST:  $(cat "$lnd_onion"):${LND_REST_DEFAULT_PORT}"
     else
         echo -e "    LND REST:  ${DIM}(not yet generated)${NC}"
     fi
@@ -285,7 +285,7 @@ show_tor_status() {
     # Electrs
     local electrs_onion="${tor_data}/hidden_service_electrs/hostname"
     if [[ -f "$electrs_onion" ]]; then
-        echo -e "    Electrs:   $(cat "$electrs_onion"):50001"
+        echo -e "    Electrs:   $(cat "$electrs_onion"):${ELECTRS_TCP_PORT}"
     else
         echo -e "    Electrs:   ${DIM}(not yet generated)${NC}"
     fi
@@ -315,7 +315,7 @@ show_connections() {
     echo ""
 
     # Tor addresses
-    if is_running tor; then
+    if dc_is_running tor; then
         show_tor_status
     else
         echo -e "  ${BOLD}Tor Hidden Services${NC}"
@@ -325,10 +325,10 @@ show_connections() {
 
     # Zeus info
     echo -e "  ${BOLD}Zeus Wallet${NC}"
-    if is_running lnd; then
+    if dc_is_running lnd; then
         local lnd_data
         lnd_data="$(awning_path data/lnd)"
-        if [[ -f "${lnd_data}/data/chain/bitcoin/mainnet/admin.macaroon" ]]; then
+        if [[ -f "${lnd_data}/${ADMIN_MACAROON_SUBPATH}" ]]; then
             print_info "Generate connection with: ${CYAN}./awning.sh zeus-connect${NC}"
         else
             print_warn "LND macaroon not yet generated (create wallet first)"
@@ -344,7 +344,7 @@ zeus_connect() {
     draw_header "ZEUS CONNECT" "Wallet Connection"
     echo ""
 
-    if ! is_running lnd; then
+    if ! dc_is_running lnd; then
         print_fail "LND is not running"
         return 1
     fi
@@ -361,7 +361,7 @@ zeus_connect() {
     local onion
     onion="$(cat "$lnd_onion")"
     local macaroon
-    macaroon="$(awning_path data/lnd/data/chain/bitcoin/mainnet/admin.macaroon)"
+    macaroon="$(awning_path "data/lnd/${ADMIN_MACAROON_SUBPATH}")"
 
     if [[ ! -f "$macaroon" ]]; then
         print_fail "LND admin macaroon not found (create and unlock wallet first)"
@@ -372,7 +372,7 @@ zeus_connect() {
     echo ""
     if ! dc_exec lnd lndconnect \
         --host="${onion}" \
-        --port=8080 \
+        --port="${LND_REST_DEFAULT_PORT}" \
         --adminmacaroonpath=/data/.lnd/data/chain/bitcoin/mainnet/admin.macaroon \
         --tlscertpath=/data/.lnd/tls.cert \
         --nocert; then

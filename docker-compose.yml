@@ -1,5 +1,5 @@
 # Awning v2: Docker Compose
-# Static compose file - no more fragment generation
+# Static compose file for all services
 
 networks:
   tor_net:

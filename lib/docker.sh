@@ -7,7 +7,7 @@ CORE_SERVICES=(tor bitcoin lnd electrs nginx)
 
 # All services including optional ones
 # SCB is only included when SCB_REPO is configured
-active_services() {
+dc_active_services() {
     local services=("${CORE_SERVICES[@]}")
     if [[ -n "${SCB_REPO:-}" ]]; then
         services+=(scb)
@@ -22,18 +22,6 @@ _needs_sudo() {
     if [[ -z "$_DOCKER_NEEDS_SUDO" ]]; then
         if docker info &>/dev/null; then
             _DOCKER_NEEDS_SUDO="no"
-
-            # If both user and root daemons are reachable, prefer the one that
-            # actually contains awning containers.
-            if sudo docker info &>/dev/null; then
-                local service_names_regex user_has_awning root_has_awning
-                service_names_regex='^(tor|bitcoin|lnd|electrs|nginx|scb)$'
-                user_has_awning="$(docker ps --format '{{.Names}}' 2>/dev/null | grep -E "$service_names_regex" || true)"
-                root_has_awning="$(sudo docker ps --format '{{.Names}}' 2>/dev/null | grep -E "$service_names_regex" || true)"
-                if [[ -z "$user_has_awning" && -n "$root_has_awning" ]]; then
-                    _DOCKER_NEEDS_SUDO="yes"
-                fi
-            fi
         else
             _DOCKER_NEEDS_SUDO="yes"
         fi
@@ -52,13 +40,16 @@ _detect_compose_cmd() {
         _COMPOSE_CMD="docker-compose-standalone"
         return 0
     fi
-    if sudo docker compose version &>/dev/null 2>&1; then
-        _COMPOSE_CMD="docker-compose-plugin"
-        return 0
-    fi
-    if command -v docker-compose &>/dev/null 2>&1 && sudo docker-compose version &>/dev/null 2>&1; then
-        _COMPOSE_CMD="docker-compose-standalone"
-        return 0
+
+    if _needs_sudo; then
+        if sudo docker compose version &>/dev/null 2>&1; then
+            _COMPOSE_CMD="docker-compose-plugin"
+            return 0
+        fi
+        if command -v docker-compose &>/dev/null 2>&1 && sudo docker-compose version &>/dev/null 2>&1; then
+            _COMPOSE_CMD="docker-compose-standalone"
+            return 0
+        fi
     fi
 
     return 1
@@ -99,10 +90,6 @@ _docker() {
 
 # --- Compose wrappers ---
 
-dc_build() {
-    _dc build "$@"
-}
-
 dc_up() {
     _dc up -d "$@"
 
@@ -114,10 +101,6 @@ dc_up() {
     fi
 }
 
-dc_down() {
-    _dc down
-}
-
 dc_down_with_spinner() {
     _dc down >/dev/null 2>&1 &
     local down_pid=$!
@@ -125,10 +108,6 @@ dc_down_with_spinner() {
         print_fail "Failed to stop/remove existing containers"
         return 1
     fi
-}
-
-dc_stop() {
-    _dc stop "$@"
 }
 
 dc_restart() {
@@ -146,14 +125,6 @@ dc_logs() {
 
 dc_exec() {
     _dc exec "$@"
-}
-
-dc_exec_t() {
-    _dc exec -T "$@"
-}
-
-dc_ps() {
-    _dc ps --format 'table {{.Name}}\t{{.Status}}\t{{.Ports}}'
 }
 
 # Return success when LND should be refreshed after Tor changes.
@@ -189,7 +160,7 @@ _should_refresh_lnd_after_tor_change() {
     if [[ "$op" == "restart" ]]; then
         [[ "$has_tor" -eq 1 ]] || return 1
         [[ "$has_lnd" -eq 0 ]] || return 1
-        is_running lnd || return 1
+        dc_is_running lnd || return 1
         return 0
     fi
 
@@ -202,19 +173,21 @@ _should_refresh_lnd_after_tor_change() {
         fi
         [[ "$has_tor" -eq 1 ]] || return 1
         [[ "$has_lnd" -eq 0 ]] || return 1
-        is_running lnd || return 1
+        dc_is_running lnd || return 1
         return 0
     fi
 
     return 1
 }
 
-# --- Service-by-service build with progress ---
-# Build output goes to a log file; on failure, show the tail
+# Build Docker images one service at a time with spinner progress.
+# Build output goes to a log file; on failure the tail is shown.
+# Args: [service...] - services to build (defaults to all active services)
+# Returns: 1 if any build fails
 dc_build_services() {
     local services=("$@")
     if [[ ${#services[@]} -eq 0 ]]; then
-        read -ra services <<< "$(active_services)"
+        read -ra services <<< "$(dc_active_services)"
     fi
     local total=${#services[@]}
     local i=0
@@ -242,18 +215,20 @@ dc_build_services() {
     rm -f "$build_log"
 }
 
-# --- Service-by-service startup with status ---
+# Start services one at a time with spinner and post-start status report.
+# Skips services that are already running.
+# Args: [service...] - services to start (defaults to all active services)
 dc_start_services() {
     local services=("$@")
     if [[ ${#services[@]} -eq 0 ]]; then
-        read -ra services <<< "$(active_services)"
+        read -ra services <<< "$(dc_active_services)"
     fi
 
     # Avoid redundant startup when everything is already running.
     local pending=()
     local service
     for service in "${services[@]}"; do
-        if ! is_running "$service" 2>/dev/null; then
+        if ! dc_is_running "$service" 2>/dev/null; then
             pending+=("$service")
         fi
     done
@@ -283,8 +258,8 @@ dc_start_services() {
     # Report status of each service
     for service in "${services[@]}"; do
         local status health
-        status="$(_docker inspect --format '{{.State.Status}}' "$service" 2>/dev/null)" || status=""
-        health="$(_docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$service" 2>/dev/null)" || health=""
+        status="$(dc_get_status "$service")"
+        health="$(dc_get_health "$service")"
 
         if [[ -z "$status" ]]; then
             print_fail "${service} (not found)"
@@ -327,11 +302,12 @@ dc_start_services() {
     done
 }
 
-# --- Service-by-service stop with progress ---
+# Stop services in reverse dependency order with spinner, then tear down.
+# Args: [service...] - services to stop (defaults to all active services)
 dc_stop_services() {
     local services=("$@")
     if [[ ${#services[@]} -eq 0 ]]; then
-        read -ra services <<< "$(active_services)"
+        read -ra services <<< "$(dc_active_services)"
     fi
 
     print_step "Stopping services..."
@@ -365,18 +341,30 @@ bitcoin_cli() {
 }
 
 lncli() {
-    dc_exec lnd lncli --network mainnet "$@"
+    dc_exec lnd lncli --network "${BITCOIN_NETWORK}" "$@"
+}
+
+# Get the state status of a container (running, exited, restarting, etc.)
+dc_get_status() {
+    local service="$1"
+    _docker inspect --format '{{.State.Status}}' "$service" 2>/dev/null || echo ""
+}
+
+# Get the healthcheck status of a container (healthy, unhealthy, starting, or empty)
+dc_get_health() {
+    local service="$1"
+    _docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$service" 2>/dev/null || echo ""
 }
 
 # Check if a service is running
-is_running() {
+dc_is_running() {
     local service="$1"
     local status
-    status="$(_docker inspect --format '{{.State.Status}}' "$service" 2>/dev/null)" || return 1
+    status="$(dc_get_status "$service")"
     [[ "$status" == "running" ]]
 }
 
 # Check if services are built
-is_built() {
+dc_is_built() {
     _docker image ls --format '{{.Repository}}' 2>/dev/null | grep -q "awning"
 }

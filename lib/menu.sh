@@ -34,7 +34,7 @@ show_menu() {
             5) menu_tools ;;
             6) menu_backup ;;
             0|q|Q) echo ""; exit 0 ;;
-            *) ;;
+            *) print_warn "Invalid choice"; sleep 0.5 ;;
         esac
     done
 }
@@ -78,7 +78,7 @@ menu_logs() {
 
     if [[ -n "$service" ]]; then
         local container_state
-        container_state="$(_docker inspect --format '{{.State.Status}}' "$service" 2>/dev/null)" || container_state=""
+        container_state="$(dc_get_status "$service")"
         if [[ -z "$container_state" ]]; then
             print_warn "Selected service container not found"
             menu_pause
@@ -140,7 +140,7 @@ menu_tools() {
         5)  menu_bitcoin_cli ;;
         6)  menu_lncli ;;
         0|"") ;;
-        *)  ;;
+        *)  print_warn "Invalid choice"; sleep 0.5 ;;
     esac
 }
 
@@ -186,75 +186,29 @@ menu_wallet() {
         read -r -p "$(echo -e "  ${CYAN}Choose [0-4]:${NC} ")" choice
 
         case "$choice" in
-            1) echo "";
-               if has_admin_macaroon; then
-                   show_wallet_balance_ui
-               else
-                   print_warn "Wallet not initialized yet. Run setup first."
-               fi
-               menu_pause ;;
-            2) echo "";
-               if has_admin_macaroon; then
-                   show_channel_balance_ui
-               else
-                   print_warn "Wallet not initialized yet. Run setup first."
-               fi
-               menu_pause ;;
-            3) echo "";
-               if has_admin_macaroon; then
-                   show_new_address_ui
-               else
-                   print_warn "Wallet not initialized yet. Run setup first."
-               fi
-               menu_pause ;;
+            1) echo ""; require_wallet && show_wallet_balance_ui; menu_pause ;;
+            2) echo ""; require_wallet && show_channel_balance_ui; menu_pause ;;
+            3) echo ""; require_wallet && show_new_address_ui; menu_pause ;;
             4) zeus_connect; menu_pause ;;
             0|"") return ;;
-            *) ;;
+            *) print_warn "Invalid choice"; sleep 0.5 ;;
         esac
     done
 }
 
-# Create LND wallet
-wallet_create() {
-    print_step "Create LND Wallet"
-    echo ""
-
-    if ! is_running lnd; then
-        print_fail "LND is not running. Start services first."
-        return 1
+# Guard: check wallet is initialized, print warning if not.
+# Returns 0 if wallet is ready, 1 otherwise.
+require_wallet() {
+    if has_admin_macaroon; then
+        return 0
     fi
-
-    local lnd_data
-    lnd_data="$(awning_path data/lnd)"
-    local password_file="${lnd_data}/password.txt"
-
-    if [[ ! -f "$password_file" ]]; then
-        print_fail "Password file not found. Run setup first."
-        return 1
-    fi
-
-    print_info "Creating wallet with the setup password..."
-    print_warn "IMPORTANT: Write down the seed phrase displayed below!"
-    echo ""
-
-    print_info "When prompted, enter the same password from setup."
-    if dc_exec lnd lncli create
-    then
-        echo ""
-        print_check "Wallet created"
-        sync_auto_unlock_password
-        print_info "Auto-unlock password updated."
-        print_info "LND will now sync to the blockchain. This may take a while."
-    else
-        echo ""
-        print_fail "Wallet creation failed"
-        return 1
-    fi
+    print_warn "Wallet not initialized yet. Run setup first."
+    return 1
 }
 
 has_admin_macaroon() {
     local path
-    path="$(awning_path data/lnd/data/chain/bitcoin/mainnet/admin.macaroon)"
+    path="$(awning_path "data/lnd/${ADMIN_MACAROON_SUBPATH}")"
     [[ -f "$path" ]]
 }
 
@@ -266,7 +220,7 @@ sync_auto_unlock_password() {
     print_info "To enable auto-unlock, re-enter the wallet password you just used."
     while true; do
         p1="$(read_password "Wallet password")"
-        if ! validate_password "$p1" 8; then
+        if ! validate_password "$p1" "$MIN_PASSWORD_LENGTH"; then
             continue
         fi
         p2="$(read_password "Confirm wallet password")"
@@ -353,41 +307,12 @@ show_new_address_ui() {
                 addr_type="p2wkh"
             fi
         fi
-        echo -e "  ${BOLD}New Address${NC}"
-        echo -e "  ${YELLOW}${address}${NC}"
+        draw_info_box \
+            "${BOLD}New Address${NC}" \
+            "Type:    ${addr_type}" \
+            "Address: ${YELLOW}${address}${NC}"
     else
         echo "$out"
-    fi
-}
-
-# Unlock LND wallet
-wallet_unlock() {
-    echo ""
-    if ! is_running lnd; then
-        print_fail "LND is not running"
-        return 1
-    fi
-
-    local password_file
-    password_file="$(awning_path data/lnd/password.txt)"
-
-    if [[ -f "$password_file" ]]; then
-        local password
-        password="$(cat "$password_file")"
-        if echo "$password" | dc_exec_t lnd lncli unlock --stdin; then
-            print_check "Wallet unlocked"
-        else
-            print_fail "Wallet unlock failed"
-            return 1
-        fi
-    else
-        print_info "Enter your wallet password:"
-        if dc_exec lnd lncli unlock; then
-            print_check "Wallet unlocked"
-        else
-            print_fail "Wallet unlock failed"
-            return 1
-        fi
     fi
 }
 
@@ -415,7 +340,7 @@ menu_backup() {
     echo -e "    Repository: ${scb_repo}"
     echo ""
 
-    if is_running scb 2>/dev/null; then
+    if dc_is_running scb 2>/dev/null; then
         print_check "SCB service is running"
     else
         print_fail "SCB service is not running"
@@ -443,7 +368,7 @@ menu_backup() {
     case "$choice" in
         1)
             echo ""
-            if is_running scb 2>/dev/null; then
+            if dc_is_running scb 2>/dev/null; then
                 dc_restart scb 2>/dev/null &
                 local restart_pid=$!
                 if spinner "$restart_pid" "Triggering backup (restarting SCB)..."; then
@@ -461,7 +386,7 @@ menu_backup() {
             menu_pause
             ;;
         0|"") ;;
-        *)  ;;
+        *)  print_warn "Invalid choice"; sleep 0.5 ;;
     esac
 }
 
@@ -473,7 +398,7 @@ menu_bitcoin_cli() {
     print_info "Interactive bitcoin-cli ${DIM}(type 'exit' or 'quit' to return)${NC}"
     echo ""
 
-    if ! is_running bitcoin 2>/dev/null; then
+    if ! dc_is_running bitcoin 2>/dev/null; then
         print_fail "Bitcoin Core is not running"
         menu_pause
         return
@@ -495,7 +420,7 @@ menu_lncli() {
     print_info "Interactive lncli ${DIM}(type 'exit' or 'quit' to return)${NC}"
     echo ""
 
-    if ! is_running lnd 2>/dev/null; then
+    if ! dc_is_running lnd 2>/dev/null; then
         print_fail "LND is not running"
         menu_pause
         return
