@@ -450,23 +450,39 @@ step_scb_config() {
         scb_ssh_dir="$(awning_path data/scb/.ssh)"
         mkdir -p "$scb_ssh_dir"
 
-        if [[ ! -f "${scb_ssh_dir}/id_ed25519" ]]; then
+        local key_priv key_pub
+        key_priv="${scb_ssh_dir}/id_ed25519"
+        key_pub="${scb_ssh_dir}/id_ed25519.pub"
+
+        if [[ -f "$key_priv" && ! -f "$key_pub" ]]; then
+            # Recover missing public key from existing private key.
             if command -v ssh-keygen &>/dev/null; then
-                ssh-keygen -t ed25519 -f "${scb_ssh_dir}/id_ed25519" -N "" -C "scb@awning" &>/dev/null
+                ssh-keygen -y -f "$key_priv" > "$key_pub" 2>/dev/null || true
+            fi
+        fi
+
+        if [[ -f "$key_priv" && -f "$key_pub" ]]; then
+            print_info "Reusing existing SCB SSH key"
+        elif [[ -f "$key_pub" && ! -f "$key_priv" ]]; then
+            print_warn "Found SCB public key without private key, generating a new key pair"
+            rm -f "$key_pub"
+        fi
+
+        if [[ ! -f "$key_priv" ]]; then
+            if command -v ssh-keygen &>/dev/null; then
+                ssh-keygen -t ed25519 -f "$key_priv" -N "" -C "scb@awning" &>/dev/null
             else
                 # Generate via Docker if ssh-keygen not available on host
                 _docker run --rm -v "${scb_ssh_dir}:/keys" debian:bookworm-slim \
                     bash -c "apt-get update -qq && apt-get install -y -qq openssh-client >/dev/null 2>&1 && ssh-keygen -t ed25519 -f /keys/id_ed25519 -N '' -C 'scb@awning' && chown $(id -u):$(id -g) /keys/id_ed25519 /keys/id_ed25519.pub" &>/dev/null
             fi
             print_check "SSH key generated"
-        else
-            print_info "SSH key already exists"
         fi
 
-        # Display the public key in a box
-        if [[ -f "${scb_ssh_dir}/id_ed25519.pub" ]]; then
+        # Display the public key
+        if [[ -f "$key_pub" ]]; then
             local pubkey
-            pubkey="$(cat "${scb_ssh_dir}/id_ed25519.pub")"
+            pubkey="$(cat "$key_pub")"
             local key_title
             key_title="${NODE_ALIAS:-AwningNode} SCB"
             echo ""
