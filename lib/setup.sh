@@ -30,7 +30,7 @@ run_setup() {
 step_prerequisites() {
     local ignore_disk_space="${1:-0}"
     echo ""
-    echo -e "  ${BOLD}Checking prerequisites...${NC}"
+    echo -e "  ${BOLD}${CYAN}Checking prerequisites...${NC}"
 
     local missing=0
 
@@ -137,10 +137,10 @@ choose_version_from_list() {
 
     local i=1
     for opt in "${options[@]}"; do
-        echo "    ${i}) ${opt}" >&2
+        echo -e "    ${BOLD}${YELLOW}${i})${NC} ${opt}" >&2
         ((i++))
     done
-    echo "    ${i}) Custom" >&2
+    echo -e "    ${BOLD}${YELLOW}${i})${NC} Custom" >&2
 
     while true; do
         local choice
@@ -249,19 +249,19 @@ select_version_interactive() {
     latest="$(fetch_latest_github_version "$repo" 2>/dev/null)" || latest="$fallback_latest"
 
     echo "" >&2
-    echo -e "  ${BOLD}${label} version${NC}" >&2
+    echo -e "  ${BOLD}${CYAN}${label} version${NC}" >&2
     local default_choice=1
     local custom_default="$latest"
     if [[ -n "$current_value" ]]; then
-        echo -e "    1) Keep current (${current_value})" >&2
-        echo -e "    2) Latest (${latest})" >&2
-        echo "    3) Custom version" >&2
-        echo "    4) Show recent releases" >&2
+        echo -e "    ${BOLD}${YELLOW}1)${NC} Keep current (${current_value})" >&2
+        echo -e "    ${BOLD}${YELLOW}2)${NC} Latest (${latest})" >&2
+        echo -e "    ${BOLD}${YELLOW}3)${NC} Custom version" >&2
+        echo -e "    ${BOLD}${YELLOW}4)${NC} Show recent releases" >&2
         custom_default="$current_value"
     else
-        echo -e "    1) Latest (${latest})" >&2
-        echo "    2) Custom version" >&2
-        echo "    3) Show recent releases" >&2
+        echo -e "    ${BOLD}${YELLOW}1)${NC} Latest (${latest})" >&2
+        echo -e "    ${BOLD}${YELLOW}2)${NC} Custom version" >&2
+        echo -e "    ${BOLD}${YELLOW}3)${NC} Show recent releases" >&2
     fi
 
     while true; do
