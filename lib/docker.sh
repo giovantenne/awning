@@ -105,6 +105,13 @@ dc_build() {
 
 dc_up() {
     _dc up -d "$@"
+
+    # If Tor is force-recreated without LND, LND can keep stale SOCKS connections.
+    # Restart LND to force re-resolve of `tor:9050`.
+    if _should_refresh_lnd_after_tor_change "up" "$@"; then
+        print_info "Tor was recreated, restarting lnd to refresh Tor SOCKS endpoint..."
+        _dc restart lnd >/dev/null 2>&1 || print_warn "Could not restart lnd automatically"
+    fi
 }
 
 dc_down() {
@@ -126,6 +133,11 @@ dc_stop() {
 
 dc_restart() {
     _dc restart "$@"
+
+    if _should_refresh_lnd_after_tor_change "restart" "$@"; then
+        print_info "Tor was restarted, restarting lnd to refresh Tor SOCKS endpoint..."
+        _dc restart lnd >/dev/null 2>&1 || print_warn "Could not restart lnd automatically"
+    fi
 }
 
 dc_logs() {
@@ -142,6 +154,59 @@ dc_exec_t() {
 
 dc_ps() {
     _dc ps --format 'table {{.Name}}\t{{.Status}}\t{{.Ports}}'
+}
+
+# Return success when LND should be refreshed after Tor changes.
+_should_refresh_lnd_after_tor_change() {
+    local op="$1"
+    shift
+
+    local has_force_recreate=0 has_any_service=0 has_tor=0 has_lnd=0 arg
+    for arg in "$@"; do
+        case "$arg" in
+            --force-recreate)
+                has_force_recreate=1
+                ;;
+            --*)
+                ;;
+            -*)
+                ;;
+            tor)
+                has_any_service=1
+                has_tor=1
+                ;;
+            lnd)
+                has_any_service=1
+                has_lnd=1
+                ;;
+            *)
+                has_any_service=1
+                ;;
+        esac
+    done
+
+    # `restart tor` while LND keeps running causes stale proxy target in LND.
+    if [[ "$op" == "restart" ]]; then
+        [[ "$has_tor" -eq 1 ]] || return 1
+        [[ "$has_lnd" -eq 0 ]] || return 1
+        is_running lnd || return 1
+        return 0
+    fi
+
+    # `up --force-recreate` with Tor involved can change Tor container IP.
+    if [[ "$op" == "up" ]]; then
+        [[ "$has_force_recreate" -eq 1 ]] || return 1
+        if [[ "$has_any_service" -eq 0 ]]; then
+            # No explicit services means all services, LND is recreated too.
+            return 1
+        fi
+        [[ "$has_tor" -eq 1 ]] || return 1
+        [[ "$has_lnd" -eq 0 ]] || return 1
+        is_running lnd || return 1
+        return 0
+    fi
+
+    return 1
 }
 
 # --- Service-by-service build with progress ---
