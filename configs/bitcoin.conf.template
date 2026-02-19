@@ -12,6 +12,7 @@ listenonion=1
 # Restrict RPC access to private Docker ranges
 rpcallowip=172.16.0.0/12
 rpcallowip=10.0.0.0/8
+rpcallowip=192.168.0.0/16
 rpcbind=0.0.0.0
 
 # P2P via Tor (privacy by default)
