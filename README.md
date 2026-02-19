@@ -1,37 +1,41 @@
 # Awning
 
-A fully dockerized Bitcoin + Lightning node. Something like [Umbrel](https://umbrel.com) but lighter and portable. Something like [RaspiBolt](https://raspibolt.org/) but easier and automated. Bitcoin/Lightning-Network oriented with no frills.
+A fully dockerized Bitcoin + Lightning node.
 
-**Awning** doesn't install anything on your host besides Docker, making it lightweight, customizable and portable.
+Awning is designed to be simple to run, easy to inspect, and portable across hosts. It aims for a no-frills setup focused on Bitcoin Core, LND, Electrs, Tor, and automatic static channel backups (SCB).
+
+Awning keeps host dependencies minimal: Docker (+ compose plugin) is enough.
 
 ## Disclaimer
+This open-source project is provided "as is" without warranty of any kind.
+The developers are not liable for damages or losses resulting from usage.
 
-This open-source project is provided 'as-is' without any warranty of any kind, either expressed or implied. The developers are not liable for any damages or losses arising out of the use of this software.
+Read the full disclaimer before use: [DISCLAIMER.md](DISCLAIMER.md)
 
-Please read the [full disclaimer](DISCLAIMER.md) before using this project.
+## What Is Included
 
-## What's included
-
-| Service | Description |
+| Service | Purpose |
 | --- | --- |
-| [Bitcoin Core](https://github.com/bitcoin/bitcoin) | Full Bitcoin node with GPG-verified download |
-| [LND](https://github.com/lightningnetwork/lnd) | Lightning Network Daemon |
-| [Electrs](https://github.com/romanz/electrs) | Electrum Rust Server (compiled from source) |
+| [Bitcoin Core](https://github.com/bitcoin/bitcoin) | Full node, RPC + ZMQ backend |
+| [LND](https://github.com/lightningnetwork/lnd) | Lightning node |
+| [Electrs](https://github.com/romanz/electrs) | Electrum server (Rust implementation) |
 | [Tor](https://www.torproject.org/) | SOCKS proxy + hidden services |
 | [Nginx](https://github.com/nginx) | SSL termination for Electrs |
-| [SCB](https://github.com/lightningnetwork/lnd/blob/master/docs/recovery.md) | Automatic Static Channel Backup to GitHub |
+| [SCB watcher](https://github.com/lightningnetwork/lnd/blob/master/docs/recovery.md) | Auto backup of `channel.backup` to Git repository |
 
 ## Prerequisites
 
-- Docker with the [compose plugin](https://docs.docker.com/compose/install/linux/)
+- Docker Engine
+- Docker Compose plugin (`docker compose`)
+- `git` (recommended for cloning)
+
+Example (Debian/Ubuntu):
 
 ```sh
-sudo apt-get install -y docker.io docker-compose-v2
+sudo apt-get install -y docker.io docker-compose-v2 git
 ```
 
-> **Note:** No other host dependencies are required. The setup wizard runs helper tooling in Docker containers (including Python-based steps), so Python is not required on the host.
-
-## Quick start
+## Quick Start (Recommended)
 
 ```sh
 git clone https://github.com/giovantenne/awning.git
@@ -39,104 +43,133 @@ cd awning
 ./awning.sh
 ```
 
-The setup wizard will guide you through:
-1. Prerequisites check
-2. Node configuration (architecture auto-detected, versions)
-3. Static Channel Backup configuration (GitHub SSH repository)
-4. Config generation (RPC auth, Tor passwords, all handled automatically)
-5. Build and start all services
-6. LND wallet initialization (auto-unlock password + wallet create)
+On first run, the setup wizard starts automatically.
 
-After setup, run `./awning.sh` again to open the interactive management menu.
+The wizard will:
+1. Check prerequisites
+2. Configure node parameters (alias, versions, architecture)
+3. Optionally configure SCB repository + deploy key test
+4. Generate configs and credentials
+5. Build and start services
+6. Initialize LND wallet
 
-## Usage
+After setup, Awning opens the main menu automatically.
 
+## Run Setup Again
+
+```sh
+./awning.sh setup
 ```
+
+Useful options:
+- `./awning.sh setup --ignore-disk-space` (or `--force`)
+
+Rerunning setup keeps previously configured values as defaults (alias, versions, SCB repo, credentials) to avoid re-entering everything.
+
+## Main Commands
+
+```text
 ./awning.sh [command]
 
 Commands:
-  (none)          Interactive menu (or setup wizard on first run)
-  setup           Run the setup wizard
+  (none)          Interactive menu
+  setup           Run setup wizard
 
+Services:
   start           Start all services
   stop            Stop all services
-  restart [svc]   Restart services (optionally specify which)
-  build [svc]     Build Docker images
+  restart [svc]   Restart all or selected services
+  build [svc]     Build images (all or selected)
   update          Rebuild and restart all services
 
-  status          Show service status and sync progress
-  logs [svc]      Follow service logs
-  connections     Show wallet connection info
+Monitoring:
+  status          Service status + sync overview
+  logs [svc]      Follow logs
+  connections     Connection details (local + Tor)
 
-  wallet-create   Create LND wallet (first time)
-  wallet-unlock   Manually unlock LND wallet
-  zeus-connect    Generate Zeus wallet connection URI
+Wallet:
+  wallet-create   Create LND wallet
+  wallet-unlock   Manual wallet unlock (fallback)
+  zeus-connect    Print lndconnect URI
 
-  bitcoin-cli     Run bitcoin-cli commands
-  lncli           Run lncli commands
-
-  help            Show help
+CLI:
+  bitcoin-cli     Run bitcoin-cli
+  lncli           Run lncli
 ```
 
-## Network ports
+## SCB (Static Channel Backup)
+
+If enabled, Awning monitors LND `channel.backup` and pushes updates to your Git repo.
+
+With setup wizard:
+- You provide SSH repo URL (for example `git@github.com:owner/repo.git`)
+- Awning generates deploy key (`data/scb/.ssh/id_ed25519.pub`)
+- You add it to repository deploy keys with write access
+- Wizard tests push permission (dry-run)
+
+Menu:
+- `Backup -> Trigger backup now`
+- `Backup -> View SCB logs`
+
+## Network Ports
+
+By default, services bind to localhost for safety.
 
 | Port | Service | Description |
 | --- | --- | --- |
-| `8080` | LND | REST API (TLS, configurable via `LND_REST_PORT`) |
-| `50002` | Electrs via Nginx | Electrum protocol (SSL, configurable via `ELECTRS_SSL_PORT`) |
+| `8080` | LND REST | TLS REST API |
+| `50002` | Electrs (via Nginx) | Electrum SSL |
 
-By default, both ports bind to `127.0.0.1` for safer local-only access. Set `LND_REST_BIND=0.0.0.0` and/or `ELECTRS_SSL_BIND=0.0.0.0` in `.env` for LAN exposure.
-Both services are also available as Tor hidden services (`.onion` addresses shown in `./awning.sh connections`).
+Binding controls in `.env`:
+- `LND_REST_BIND`, `LND_REST_PORT`
+- `ELECTRS_SSL_BIND`, `ELECTRS_SSL_PORT`
 
-## Connect your wallet
+Both LND and Electrs are also exposed through Tor hidden services.
 
-### Electrs (Sparrow, Blue Wallet, etc.)
+## Wallet Connections
 
-Get your Electrs connection info:
+### Electrum-compatible wallets
+
+Run:
 ```sh
 ./awning.sh connections
 ```
 
-Use the local IP address with port `50002` (SSL) or the `.onion` address with port `50001` via Tor.
+Use:
+- local endpoint (`<host>:50002` SSL), or
+- Tor endpoint (`.onion:50001`).
 
-### Zeus (via Tor)
+### Zeus
 
+Run:
 ```sh
 ./awning.sh zeus-connect
 ```
 
-This generates an lndconnect URI for Zeus. In Zeus: Add Node > lndconnect REST.
+In Zeus: `Add Node -> lndconnect REST`.
 
-## Updating versions
+## Version Management
 
-Edit `.env` to change `BITCOIN_CORE_VERSION`, `LND_VERSION`, or `ELECTRS_VERSION`, then:
+You can update service versions from setup, or editing `.env`:
+- `BITCOIN_CORE_VERSION`
+- `LND_VERSION`
+- `ELECTRS_VERSION`
+
+Then rebuild:
 
 ```sh
 ./awning.sh update
 ```
 
-## Directory structure
+## Data and Project Layout
 
-```
+```text
 awning/
-├── awning.sh                    # Main entry point
-├── lib/
-│   ├── common.sh                # Logging, colors, utilities
-│   ├── docker.sh                # Docker compose wrappers
-│   ├── setup.sh                 # Setup wizard
-│   ├── health.sh                # Status checks
-│   └── menu.sh                  # Interactive menu
+├── awning.sh
+├── docker-compose.yml
+├── .env.sample
 ├── configs/
-│   ├── bitcoin.conf.template    # Bitcoin Core config template
-│   ├── lnd.conf.template        # LND config template
-│   ├── electrs.toml.template    # Electrs config template
-│   └── torrc.template           # Tor config template
 ├── data/
-│   ├── bitcoin/                 # Blockchain data
-│   ├── lnd/                     # LND data + wallet
-│   ├── electrs/                 # Electrs index
-│   ├── tor/                     # Tor hidden service keys
-│   └── scb/                     # SCB git repo
 ├── dockerfiles/
 │   ├── Dockerfile.bitcoin
 │   ├── Dockerfile.lnd
@@ -144,28 +177,66 @@ awning/
 │   ├── Dockerfile.tor
 │   ├── Dockerfile.nginx
 │   ├── Dockerfile.scb
-│   ├── entrypoints/
-│   │   ├── lnd.sh
-│   │   └── scb.sh
-│   └── files/
-│       └── nginx.conf
-├── docker-compose.yml
-├── .env.sample
+│   └── entrypoints/
+├── lib/
+│   ├── common.sh
+│   ├── docker.sh
+│   ├── setup.sh
+│   ├── health.sh
+│   └── menu.sh
 └── README.md
 ```
 
-## Security
+Persistent state lives in `data/`:
+- `data/bitcoin`
+- `data/lnd`
+- `data/electrs`
+- `data/tor`
+- `data/scb`
 
-- **RPC authentication**: Bitcoin Core uses `rpcauth` (HMAC-SHA256 hashed password) instead of cookie files. Credentials are auto-generated during setup.
-- **Tor control auth**: Uses hashed password instead of shared cookie file.
-- **Network isolation**: Services run on isolated Docker bridge networks. Tor is on a dedicated network shared only with services that need it (`bitcoin`, `lnd`, `electrs`). Only LND REST (8080) and Electrs SSL (50002) are exposed to the host.
-- **Tor by default**: Bitcoin Core connects to peers via Tor (`proxy=tor:9050`).
-- **GPG verification**: Bitcoin Core and LND binaries are GPG-verified during Docker build.
+## Troubleshooting
+
+### LND restarting
+
+Check logs:
+```sh
+./awning.sh logs lnd
+```
+
+Common causes:
+- wallet not initialized
+- RPC credential mismatch after manual config edits
+- Tor/controller auth mismatch
+
+Use setup rerun to regenerate/reconcile configs:
+```sh
+./awning.sh setup
+```
+
+### Service health
+
+Use:
+```sh
+./awning.sh status
+```
+
+State meanings:
+- `healthy`: container + healthcheck OK
+- `running`: container running (no healthcheck)
+- `starting/restarting/unhealthy`: investigate with logs
+
+## Security Notes
+
+- Docker network isolation is used between services.
+- Bitcoin RPC auth uses `rpcauth` in `bitcoin.conf`.
+- Tor control uses hashed password.
+- Sensitive generated files (`.env`, passwords) are permission-restricted.
 
 ## Support
 
-For any questions or issues you can join our [Telegram support channel](https://t.me/awning_node) or open a [GitHub issue](https://github.com/giovantenne/awning/issues/new).
+- Issues: https://github.com/giovantenne/awning/issues/new
 
 ## Donations
 
-If you would like to contribute and help dev team with this project you can send a donation to the following LN address `cg@pos.btcpayserver.it` or on-chain `bc1qdx6r7z2c2dtdfa2tn9a2u4rc3g5myyfquqq97x`
+- Lightning: `cg@pos.btcpayserver.it`
+- On-chain: `bc1qdx6r7z2c2dtdfa2tn9a2u4rc3g5myyfquqq97x`
