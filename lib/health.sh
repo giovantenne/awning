@@ -12,6 +12,22 @@ show_status() {
     echo ""
 
     local services
+    local bitcoin_wait_detail=""
+    if is_running bitcoin 2>/dev/null; then
+        local binfo bprogress bblocks bheaders bibd bpct
+        binfo="$(bitcoin_cli getblockchaininfo 2>/dev/null)" || binfo=""
+        if [[ -n "$binfo" ]]; then
+            bprogress="$(echo "$binfo" | jq -r '.verificationprogress // empty')"
+            bblocks="$(echo "$binfo" | jq -r '.blocks // 0')"
+            bheaders="$(echo "$binfo" | jq -r '.headers // 0')"
+            bibd="$(echo "$binfo" | jq -r '.initialblockdownload // false')"
+            bpct="$(echo "${bprogress:-0}" | awk '{printf "%.2f", $1 * 100}')"
+            if [[ "$bibd" == "true" ]] || [[ "${bblocks:-0}" -lt "${bheaders:-0}" ]] || (( $(echo "${bpct:-0} < 99.99" | bc -l 2>/dev/null || echo 0) )); then
+                bitcoin_wait_detail="waiting for bitcoin sync (${bpct}%)"
+            fi
+        fi
+    fi
+
     read -ra services <<< "$(active_services)"
     printf "  %-10s %-12s %s\n" "SERVICE" "STATE" "DETAILS"
     echo -e "  ${DIM}---------------------------------------------${NC}"
@@ -27,6 +43,9 @@ show_status() {
         else
             case "$status" in
                 restarting)
+                    if [[ ("$service" == "lnd" || "$service" == "electrs") && -n "$bitcoin_wait_detail" ]]; then
+                        detail="$bitcoin_wait_detail"
+                    fi
                     state_label="restarting"
                     printf "  %-10s ${YELLOW}%-12s${NC} %s\n" "$service" "$state_label" "$detail"
                     ;;
@@ -35,9 +54,15 @@ show_status() {
                         state_label="healthy"
                         printf "  %-10s ${GREEN}%-12s${NC} %s\n" "$service" "$state_label" "$detail"
                     elif [[ "$health" == "starting" ]]; then
+                        if [[ ("$service" == "lnd" || "$service" == "electrs") && -n "$bitcoin_wait_detail" ]]; then
+                            detail="$bitcoin_wait_detail"
+                        fi
                         state_label="starting"
                         printf "  %-10s ${YELLOW}%-12s${NC} %s\n" "$service" "$state_label" "$detail"
                     elif [[ "$health" == "unhealthy" ]]; then
+                        if [[ ("$service" == "lnd" || "$service" == "electrs") && -n "$bitcoin_wait_detail" ]]; then
+                            detail="$bitcoin_wait_detail"
+                        fi
                         state_label="unhealthy"
                         printf "  %-10s ${RED}%-12s${NC} %s\n" "$service" "$state_label" "$detail"
                     else

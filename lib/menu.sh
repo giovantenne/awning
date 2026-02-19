@@ -76,10 +76,19 @@ menu_logs() {
         *) return ;;
     esac
 
-    if [[ -n "$service" ]] && ! is_running "$service" 2>/dev/null; then
-        print_warn "Selected service is not running"
-        menu_pause
-        return
+    if [[ -n "$service" ]]; then
+        local container_state
+        container_state="$(_docker inspect --format '{{.State.Status}}' "$service" 2>/dev/null)" || container_state=""
+        if [[ -z "$container_state" ]]; then
+            print_warn "Selected service container not found"
+            menu_pause
+            return
+        fi
+        if [[ "$container_state" != "running" && "$container_state" != "restarting" ]]; then
+            print_warn "Selected service container is not active"
+            menu_pause
+            return
+        fi
     fi
 
     echo ""
