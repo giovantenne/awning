@@ -129,11 +129,29 @@ main() {
             ;;
 
         # Wallet
-        wallet-create)
-            wallet_create
+        wallet-balance)
+            if has_admin_macaroon; then
+                show_wallet_balance_ui
+            else
+                print_warn "Wallet not initialized yet. Run setup first."
+                return 1
+            fi
             ;;
-        wallet-unlock)
-            wallet_unlock
+        channel-balance)
+            if has_admin_macaroon; then
+                show_channel_balance_ui
+            else
+                print_warn "Wallet not initialized yet. Run setup first."
+                return 1
+            fi
+            ;;
+        new-address)
+            if has_admin_macaroon; then
+                show_new_address_ui
+            else
+                print_warn "Wallet not initialized yet. Run setup first."
+                return 1
+            fi
             ;;
         zeus-connect)
             zeus_connect
@@ -184,8 +202,9 @@ show_help() {
     echo -e "    ${CYAN}connections${NC}     Wallet connection info"
     echo ""
     echo -e "  ${BOLD}Wallet:${NC}"
-    echo -e "    ${CYAN}wallet-create${NC}   Create LND wallet (first time)"
-    echo -e "    ${CYAN}wallet-unlock${NC}   Manually unlock LND wallet"
+    echo -e "    ${CYAN}wallet-balance${NC}  Show LND on-chain balance"
+    echo -e "    ${CYAN}channel-balance${NC} Show LND Lightning balance"
+    echo -e "    ${CYAN}new-address${NC}     Generate a new on-chain address"
     echo -e "    ${CYAN}zeus-connect${NC}    Generate Zeus connection URI"
     echo ""
     echo -e "  ${BOLD}CLI:${NC}"

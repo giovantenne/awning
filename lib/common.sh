@@ -322,8 +322,15 @@ awning_path() {
 # --- Status helpers ---
 # Count running services
 count_running_services() {
-    local count
-    count="$(_dc ps --status running --format '{{.Name}}' 2>/dev/null | wc -l)" || count=0
+    local count=0
+    local service
+    local services
+    read -ra services <<< "$(active_services)"
+    for service in "${services[@]}"; do
+        if is_running "$service" 2>/dev/null; then
+            count=$((count + 1))
+        fi
+    done
     echo "$count"
 }
 

@@ -307,8 +307,8 @@ lncli() {
 is_running() {
     local service="$1"
     local status
-    status="$(_dc ps --status running --format '{{.Name}}' 2>/dev/null)" || return 1
-    echo "$status" | grep -qx "${service}"
+    status="$(_docker inspect --format '{{.State.Status}}' "$service" 2>/dev/null)" || return 1
+    [[ "$status" == "running" ]]
 }
 
 # Check if services are built
