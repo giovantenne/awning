@@ -70,41 +70,26 @@ step_prerequisites() {
     fi
 
     # Disk space check
-    # If data/bitcoin already contains blockchain data, count it as reusable space.
-    local avail_kb avail_gb existing_bitcoin_kb existing_bitcoin_gb effective_kb effective_gb
+    # Required free space is reduced by already downloaded blockchain data.
+    local avail_kb avail_gb existing_bitcoin_kb existing_bitcoin_gb required_free_kb required_free_gb
     avail_kb="$(df --output=avail "$(awning_path .)" 2>/dev/null | tail -1 | tr -d ' ')" || avail_kb=0
     avail_gb="$(echo "$avail_kb" | awk '{printf "%.1f", $1 / 1048576}')"
     existing_bitcoin_kb="$(du -sk "$(awning_path data/bitcoin)" 2>/dev/null | awk '{print $1}')" || existing_bitcoin_kb=0
     existing_bitcoin_kb="${existing_bitcoin_kb:-0}"
     existing_bitcoin_gb="$(echo "$existing_bitcoin_kb" | awk '{printf "%.1f", $1 / 1048576}')"
-    effective_kb=$((avail_kb + existing_bitcoin_kb))
-    effective_gb="$(echo "$effective_kb" | awk '{printf "%.1f", $1 / 1048576}')"
-    local effective_gb_int="${effective_gb%.*}"
 
-    if [[ "$effective_gb_int" -ge 900 ]]; then
-        if [[ "$existing_bitcoin_kb" -gt 0 ]]; then
-            print_check "Disk space: ${avail_gb} GB free + ${existing_bitcoin_gb} GB existing bitcoin data = ${effective_gb} GB effective (900 GB required)"
-        else
-            print_check "Disk space: ${avail_gb} GB available (900 GB required)"
-        fi
-    elif [[ "$effective_gb_int" -ge 600 ]]; then
-        if [[ "$existing_bitcoin_kb" -gt 0 ]]; then
-            print_warn "Disk space: ${avail_gb} GB free + ${existing_bitcoin_gb} GB existing bitcoin data = ${effective_gb} GB effective (900 GB recommended)"
-        else
-            print_warn "Disk space: ${avail_gb} GB available (900 GB recommended)"
-        fi
+    required_free_kb=$((900 * 1048576 - existing_bitcoin_kb))
+    if [[ "$required_free_kb" -lt 0 ]]; then
+        required_free_kb=0
+    fi
+    required_free_gb="$(echo "$required_free_kb" | awk '{printf "%.1f", $1 / 1048576}')"
+
+    if [[ "$avail_kb" -ge "$required_free_kb" ]]; then
+        print_check "Disk space: ${avail_gb} GB free (required: ${required_free_gb} GB free)"
     elif [[ "$ignore_disk_space" == "1" ]]; then
-        if [[ "$existing_bitcoin_kb" -gt 0 ]]; then
-            print_warn "Disk space: ${avail_gb} GB free + ${existing_bitcoin_gb} GB existing bitcoin data = ${effective_gb} GB effective (below minimum, override enabled)"
-        else
-            print_warn "Disk space: ${avail_gb} GB available (below minimum, override enabled)"
-        fi
+        print_warn "Disk space: ${avail_gb} GB free (required: ${required_free_gb} GB free, override enabled)"
     else
-        if [[ "$existing_bitcoin_kb" -gt 0 ]]; then
-            print_fail "Disk space: ${avail_gb} GB free + ${existing_bitcoin_gb} GB existing bitcoin data = ${effective_gb} GB effective (900 GB required)"
-        else
-            print_fail "Disk space: ${avail_gb} GB available (900 GB required)"
-        fi
+        print_fail "Disk space: ${avail_gb} GB free (required: ${required_free_gb} GB free)"
         missing=1
     fi
 
