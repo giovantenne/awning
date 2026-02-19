@@ -22,6 +22,18 @@ _needs_sudo() {
     if [[ -z "$_DOCKER_NEEDS_SUDO" ]]; then
         if docker info &>/dev/null; then
             _DOCKER_NEEDS_SUDO="no"
+
+            # If both user and root daemons are reachable, prefer the one that
+            # actually contains awning containers.
+            if sudo docker info &>/dev/null; then
+                local service_names_regex user_has_awning root_has_awning
+                service_names_regex='^(tor|bitcoin|lnd|electrs|nginx|scb)$'
+                user_has_awning="$(docker ps --format '{{.Names}}' 2>/dev/null | grep -E "$service_names_regex" || true)"
+                root_has_awning="$(sudo docker ps --format '{{.Names}}' 2>/dev/null | grep -E "$service_names_regex" || true)"
+                if [[ -z "$user_has_awning" && -n "$root_has_awning" ]]; then
+                    _DOCKER_NEEDS_SUDO="yes"
+                fi
+            fi
         else
             _DOCKER_NEEDS_SUDO="yes"
         fi

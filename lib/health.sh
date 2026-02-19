@@ -16,30 +16,44 @@ show_status() {
     printf "  %-10s %-12s %s\n" "SERVICE" "STATE" "DETAILS"
     echo -e "  ${DIM}---------------------------------------------${NC}"
     for service in "${services[@]}"; do
-        local status
-        status="$(_dc ps --format '{{.Status}}' "$service" 2>/dev/null)" || status=""
-        local detail
-        detail="$status"
+        local status health detail state_label
+        status="$(_docker inspect --format '{{.State.Status}}' "$service" 2>/dev/null)" || status=""
+        health="$(_docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$service" 2>/dev/null)" || health=""
+        detail=""
+        state_label=""
 
         if [[ -z "$status" ]]; then
             printf "  %-10s ${RED}%-12s${NC} %s\n" "$service" "not found" ""
-        elif echo "$status" | grep -qi "restarting"; then
-            detail="$(echo "$status" | sed -E 's/[[:space:]]*\(restarting\)//I')"
-            printf "  %-10s ${YELLOW}%-12s${NC} %s\n" "$service" "restarting" "$detail"
-        elif echo "$status" | grep -qi "unhealthy"; then
-            detail="$(echo "$status" | sed -E 's/[[:space:]]*\(unhealthy\)//I')"
-            printf "  %-10s ${RED}%-12s${NC} %s\n" "$service" "unhealthy" "$detail"
-        elif echo "$status" | grep -qi "healthy"; then
-            detail="$(echo "$status" | sed -E 's/[[:space:]]*\(healthy\)//I')"
-            printf "  %-10s ${GREEN}%-12s${NC} %s\n" "$service" "healthy" "$detail"
-        elif echo "$status" | grep -qi "starting"; then
-            detail="$(echo "$status" | sed -E 's/[[:space:]]*\(health: starting\)//I; s/[[:space:]]*\(starting\)//I')"
-            printf "  %-10s ${YELLOW}%-12s${NC} %s\n" "$service" "starting" "$detail"
-        elif echo "$status" | grep -qi "up\|running"; then
-            detail="$(echo "$status" | sed -E 's/[[:space:]]*\(running\)//I')"
-            printf "  %-10s ${GREEN}%-12s${NC} %s\n" "$service" "running" "$detail"
         else
-            printf "  %-10s ${RED}%-12s${NC} %s\n" "$service" "error" "$status"
+            case "$status" in
+                restarting)
+                    state_label="restarting"
+                    printf "  %-10s ${YELLOW}%-12s${NC} %s\n" "$service" "$state_label" "$detail"
+                    ;;
+                running)
+                    if [[ "$health" == "healthy" ]]; then
+                        state_label="healthy"
+                        printf "  %-10s ${GREEN}%-12s${NC} %s\n" "$service" "$state_label" "$detail"
+                    elif [[ "$health" == "starting" ]]; then
+                        state_label="starting"
+                        printf "  %-10s ${YELLOW}%-12s${NC} %s\n" "$service" "$state_label" "$detail"
+                    elif [[ "$health" == "unhealthy" ]]; then
+                        state_label="unhealthy"
+                        printf "  %-10s ${RED}%-12s${NC} %s\n" "$service" "$state_label" "$detail"
+                    else
+                        state_label="running"
+                        printf "  %-10s ${GREEN}%-12s${NC} %s\n" "$service" "$state_label" "$detail"
+                    fi
+                    ;;
+                exited|dead)
+                    state_label="$status"
+                    printf "  %-10s ${RED}%-12s${NC} %s\n" "$service" "$state_label" "$detail"
+                    ;;
+                *)
+                    state_label="$status"
+                    printf "  %-10s ${RED}%-12s${NC} %s\n" "$service" "$state_label" "$detail"
+                    ;;
+            esac
         fi
     done
 
