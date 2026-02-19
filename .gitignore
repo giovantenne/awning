@@ -25,3 +25,9 @@ data/tor/*
 
 data/scb/*
 !data/scb/.gitkeep
+
+data/rtl/*
+!data/rtl/.gitkeep
+
+# Generated configs (RTL)
+configs/rtl.conf

@@ -1,30 +1,38 @@
 #!/bin/bash
 # Awning v2: Common utilities
-# UI primitives, box drawing, logging, user interaction, and error handling
+# UI primitives, box drawing, logging, user interaction, and validation helpers
 
-# --- Constants ---
+# ============================================================
+# Constants
+# ============================================================
 MIN_PASSWORD_LENGTH=8
 LND_REST_DEFAULT_PORT=8080
 ELECTRS_TCP_PORT=50001
+RTL_PORT=3000
 BITCOIN_NETWORK="mainnet"
 ADMIN_MACAROON_SUBPATH="data/chain/bitcoin/mainnet/admin.macaroon"
 
-# --- Colors ---
-# Respect NO_COLOR convention (https://no-color.org/) and dumb terminals
+# ============================================================
+# Colors (respects NO_COLOR convention: https://no-color.org/)
+# ============================================================
 if [[ -n "${NO_COLOR:-}" ]] || [[ "${TERM:-}" == "dumb" ]] || ! [[ -t 1 ]]; then
-    RED='' GREEN='' YELLOW='' BLUE='' CYAN='' BOLD='' DIM='' NC=''
+    RED='' GREEN='' YELLOW='' BLUE='' CYAN='' WHITE='' BOLD='' DIM='' UNDERLINE='' NC=''
 else
     RED='\033[0;31m'
     GREEN='\033[0;32m'
     YELLOW='\033[0;33m'
     BLUE='\033[0;34m'
     CYAN='\033[0;36m'
+    WHITE='\033[1;37m'
     BOLD='\033[1m'
     DIM='\033[2m'
+    UNDERLINE='\033[4m'
     NC='\033[0m' # No Color
 fi
 
-# --- Unicode icons ---
+# ============================================================
+# Unicode icons
+# ============================================================
 ICON_OK="${GREEN}\xe2\x9c\x93${NC}"       # ✓
 ICON_FAIL="${RED}\xe2\x9c\x97${NC}"       # ✗
 ICON_BOLT="\xe2\x9a\xa1"                  # ⚡
@@ -33,7 +41,9 @@ ICON_WARN="${YELLOW}\xe2\x9a\xa0${NC}"    # ⚠
 BAR_FILLED="\xe2\x96\x93"                 # ▓
 BAR_EMPTY="\xe2\x96\x91"                  # ░
 
-# --- Box drawing characters ---
+# ============================================================
+# Box drawing characters
+# ============================================================
 BOX_TL="\xe2\x94\x8c"  # ┌
 BOX_TR="\xe2\x94\x90"  # ┐
 BOX_BL="\xe2\x94\x94"  # └
@@ -41,14 +51,19 @@ BOX_BR="\xe2\x94\x98"  # ┘
 BOX_H="\xe2\x94\x80"   # ─
 BOX_V="\xe2\x94\x82"   # │
 
-# --- Terminal width ---
+# ============================================================
+# Terminal utilities
+# ============================================================
+
 term_width() {
     local w
     w="$(tput cols 2>/dev/null)" || w=80
     echo "$w"
 }
 
-# --- Box drawing functions ---
+# ============================================================
+# Box drawing functions
+# ============================================================
 
 # Draw a horizontal line of given width
 # Usage: draw_line 40
@@ -179,14 +194,18 @@ draw_info_box() {
     printf '%b\n' "$BOX_BR"
 }
 
-# --- Logging with icons ---
+# ============================================================
+# Logging with icons
+# ============================================================
 print_check() { echo -e "  [${ICON_OK}] $*"; }
 print_fail()  { echo -e "  [${ICON_FAIL}] $*"; }
 print_info()  { echo -e "  ${DIM}$*${NC}"; }
 print_warn()  { echo -e "  [${ICON_WARN}] $*"; }
 print_step()  { echo -e "\n${BOLD}${CYAN}$*${NC}"; }
 
-# --- Progress bar ---
+# ============================================================
+# Progress bar
+# ============================================================
 # Usage: progress_bar 45 100 30  (value, max, bar_width)
 # Or:    progress_bar 0.45 1 30  (fraction)
 progress_bar() {
@@ -229,7 +248,9 @@ progress_bar() {
     printf '\n'
 }
 
-# --- Spinner ---
+# ============================================================
+# Spinner animation
+# ============================================================
 # Usage: long_command & spinner $! "Doing something..."
 spinner() {
     local pid=$1
@@ -238,7 +259,7 @@ spinner() {
     local i=0
 
     while kill -0 "$pid" 2>/dev/null; do
-        printf "\r  ${CYAN}%s${NC} %s" "${frames[i++ % ${#frames[@]}]}" "$message"
+        printf "\r  [${CYAN}%s${NC}] %s" "${frames[i++ % ${#frames[@]}]}" "$message"
         sleep 0.1
     done
 
@@ -255,7 +276,9 @@ spinner() {
     return $exit_code
 }
 
-# --- User interaction ---
+# ============================================================
+# User interaction
+# ============================================================
 confirm() {
     local prompt="${1:-Continue?}"
     local default="${2:-y}"
@@ -266,7 +289,7 @@ confirm() {
         prompt="${prompt} [y/N]"
     fi
 
-    read -r -p "$(echo -e "  ${CYAN}${prompt}${NC} ")" answer
+    read -r -p "$(echo -e "  ${YELLOW}${prompt}${NC} ")" answer
     answer="${answer:-$default}"
 
     [[ "$answer" =~ ^[Yy]$ ]]
@@ -279,10 +302,10 @@ read_input() {
     local result
 
     if [[ -n "$default" ]]; then
-        read -r -p "$(echo -e "  ${prompt} ${DIM}[${default}]${NC}: ")" result
+        read -r -p "$(echo -e "  ${YELLOW}${prompt}${NC} ${DIM}[${default}]${NC}: ")" result
         echo "${result:-$default}"
     else
-        read -r -p "$(echo -e "  ${prompt}: ")" result
+        read -r -p "$(echo -e "  ${YELLOW}${prompt}${NC}: ")" result
         echo "$result"
     fi
 }
@@ -292,12 +315,14 @@ read_password() {
     local prompt="$1"
     local result
 
-    read -r -s -p "$(echo -e "  ${prompt}: ")" result
+    read -r -s -p "$(echo -e "  ${YELLOW}${prompt}${NC}: ")" result
     echo >&2  # newline after hidden input
     echo "$result"
 }
 
-# --- Validation ---
+# ============================================================
+# Validation
+# ============================================================
 validate_password() {
     local password="$1"
     local min_length="${2:-8}"
@@ -309,13 +334,17 @@ validate_password() {
     return 0
 }
 
-# --- Random string generation ---
+# ============================================================
+# Random string generation
+# ============================================================
 generate_password() {
     local length="${1:-24}"
     tr -dc 'A-Za-z0-9' < /dev/urandom | head -c "$length"
 }
 
-# --- Prerequisites check ---
+# ============================================================
+# Prerequisite checks
+# ============================================================
 check_command() {
     local cmd="$1"
     if ! command -v "$cmd" &>/dev/null; then
@@ -325,12 +354,17 @@ check_command() {
     return 0
 }
 
-# --- Project paths ---
+# ============================================================
+# Project paths
+# ============================================================
 awning_path() {
     echo "${AWNING_DIR}/$1"
 }
 
-# --- Status helpers ---
+# ============================================================
+# Status helpers
+# ============================================================
+
 # Count running services
 count_running_services() {
     local count=0

@@ -12,7 +12,7 @@ show_status() {
     echo ""
 
     local services
-    local bitcoin_wait_detail=""
+    local bitcoin_sync_detail=""
     if dc_is_running bitcoin 2>/dev/null; then
         local binfo bprogress bblocks bheaders bibd bpct
         binfo="$(bitcoin_cli getblockchaininfo 2>/dev/null)" || binfo=""
@@ -22,8 +22,8 @@ show_status() {
             bheaders="$(echo "$binfo" | jq -r '.headers // 0')"
             bibd="$(echo "$binfo" | jq -r '.initialblockdownload // false')"
             bpct="$(echo "${bprogress:-0}" | awk '{printf "%.2f", $1 * 100}')"
-            if [[ "$bibd" == "true" ]] || [[ "${bblocks:-0}" -lt "${bheaders:-0}" ]] || (( $(echo "${bpct:-0} < 99.99" | bc -l 2>/dev/null || echo 0) )); then
-                bitcoin_wait_detail="waiting for bitcoin sync (${bpct}%)"
+            if [[ "$bibd" == "true" ]] || [[ "${bblocks:-0}" -lt "${bheaders:-0}" ]] || awk "BEGIN {exit (${bpct:-0} >= 99.99)}" 2>/dev/null; then
+                bitcoin_sync_detail="sync (${bpct}%)"
             fi
         fi
     fi
@@ -38,14 +38,16 @@ show_status() {
         detail=""
         state_label=""
 
+        # Show sync progress on the bitcoin row
+        if [[ "$service" == "bitcoin" && -n "$bitcoin_sync_detail" ]]; then
+            detail="$bitcoin_sync_detail"
+        fi
+
         if [[ -z "$status" ]]; then
             printf "  %-10s ${RED}%-12s${NC} %s\n" "$service" "not found" ""
         else
             case "$status" in
                 restarting)
-                    if [[ ("$service" == "lnd" || "$service" == "electrs") && -n "$bitcoin_wait_detail" ]]; then
-                        detail="$bitcoin_wait_detail"
-                    fi
                     state_label="restarting"
                     printf "  %-10s ${YELLOW}%-12s${NC} %s\n" "$service" "$state_label" "$detail"
                     ;;
@@ -54,15 +56,9 @@ show_status() {
                         state_label="healthy"
                         printf "  %-10s ${GREEN}%-12s${NC} %s\n" "$service" "$state_label" "$detail"
                     elif [[ "$health" == "starting" ]]; then
-                        if [[ ("$service" == "lnd" || "$service" == "electrs") && -n "$bitcoin_wait_detail" ]]; then
-                            detail="$bitcoin_wait_detail"
-                        fi
                         state_label="starting"
                         printf "  %-10s ${YELLOW}%-12s${NC} %s\n" "$service" "$state_label" "$detail"
                     elif [[ "$health" == "unhealthy" ]]; then
-                        if [[ ("$service" == "lnd" || "$service" == "electrs") && -n "$bitcoin_wait_detail" ]]; then
-                            detail="$bitcoin_wait_detail"
-                        fi
                         state_label="unhealthy"
                         printf "  %-10s ${RED}%-12s${NC} %s\n" "$service" "$state_label" "$detail"
                     else
@@ -97,6 +93,11 @@ show_status() {
     # Electrs status
     if dc_is_running electrs; then
         show_electrs_status
+    fi
+
+    # RTL status (only when enabled)
+    if [[ -n "${RTL_PASSWORD:-}" ]] && dc_is_running rtl; then
+        show_rtl_status
     fi
 }
 
@@ -267,6 +268,32 @@ show_electrs_status() {
     echo ""
 }
 
+# RTL web interface status
+show_rtl_status() {
+    local health
+    health="$(dc_get_health rtl)"
+    [[ -z "$health" ]] && health="unknown"
+
+    echo -e "  ${BOLD}RTL${NC}"
+    echo -e "    Health:      ${health}"
+
+    local rtl_bind rtl_port rtl_host
+    rtl_bind="${RTL_BIND:-127.0.0.1}"
+    rtl_port="${RTL_PORT:-3000}"
+    rtl_host="${rtl_bind}"
+    if [[ "$rtl_bind" == "0.0.0.0" ]]; then
+        rtl_host="$(hostname -I 2>/dev/null | awk '{print $1}')" || rtl_host="<your-ip>"
+    fi
+
+    if [[ "$health" == "healthy" ]]; then
+        echo -e "    Web UI:      ${WHITE}${UNDERLINE}http://${rtl_host}:${rtl_port}${NC}"
+    else
+        echo -e "    Web UI:      ${WHITE}${UNDERLINE}http://${rtl_host}:${rtl_port}${NC} ${DIM}(not ready)${NC}"
+    fi
+
+    echo ""
+}
+
 # Tor hidden service addresses
 show_tor_status() {
     echo -e "  ${BOLD}Tor Hidden Services${NC}"
@@ -290,6 +317,16 @@ show_tor_status() {
         echo -e "    Electrs:   ${DIM}(not yet generated)${NC}"
     fi
 
+    # RTL (only when enabled)
+    if [[ -n "${RTL_PASSWORD:-}" ]]; then
+        local rtl_onion="${tor_data}/hidden_service_rtl/hostname"
+        if [[ -f "$rtl_onion" ]]; then
+            echo -e "    RTL:       $(cat "$rtl_onion"):${RTL_PORT}"
+        else
+            echo -e "    RTL:       ${DIM}(not yet generated)${NC}"
+        fi
+    fi
+
     echo ""
 }
 
@@ -310,8 +347,19 @@ show_connections() {
     [[ "$lnd_bind" == "0.0.0.0" ]] && lnd_host="$local_ip"
     [[ "$electrs_bind" == "0.0.0.0" ]] && electrs_host="$local_ip"
 
-    echo -e "    LND REST (TLS):  https://${lnd_host}:${lnd_port}"
-    echo -e "    Electrs (SSL):   ${electrs_host}:${electrs_port}"
+    echo -e "    LND REST (TLS):  ${WHITE}${UNDERLINE}https://${lnd_host}:${lnd_port}${NC}"
+    echo -e "    Electrs (SSL):   ${WHITE}${UNDERLINE}${electrs_host}:${electrs_port}${NC}"
+
+    # RTL local URL (only when enabled)
+    if [[ -n "${RTL_PASSWORD:-}" ]]; then
+        local rtl_bind rtl_port rtl_host
+        rtl_bind="${RTL_BIND:-127.0.0.1}"
+        rtl_port="${RTL_PORT:-3000}"
+        rtl_host="${rtl_bind}"
+        [[ "$rtl_bind" == "0.0.0.0" ]] && rtl_host="$local_ip"
+        echo -e "    RTL Web UI:      ${WHITE}${UNDERLINE}http://${rtl_host}:${rtl_port}${NC}"
+    fi
+
     echo ""
 
     # Tor addresses

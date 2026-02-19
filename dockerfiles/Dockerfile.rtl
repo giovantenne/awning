@@ -1,0 +1,52 @@
+# Awning v2: Ride The Lightning (RTL)
+# Web-based Lightning node management interface
+# Built from source with GPG verification following RaspiBolt best practices
+
+FROM node:20-bookworm-slim AS builder
+ARG RTL_VERSION
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git gnupg curl ca-certificates && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+
+# Import RTL developer's PGP key (saubyk)
+RUN curl -sL https://keybase.io/suheb/pgp_keys.asc | gpg --import
+
+# Clone and verify the release tag
+RUN git clone --branch v${RTL_VERSION} --depth 1 https://github.com/Ride-The-Lightning/RTL.git . \
+    && git verify-tag v${RTL_VERSION}
+
+# Install production dependencies only
+RUN if [ -f package-lock.json ]; then \
+        npm ci --omit=dev --legacy-peer-deps; \
+    else \
+        npm install --omit=dev --legacy-peer-deps; \
+    fi
+
+# --- Runtime image ---
+FROM node:20-bookworm-slim
+ARG UID=1000
+ARG GID=1000
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    netcat-openbsd && rm -rf /var/lib/apt/lists/*
+
+# Remove the default node user (UID/GID 1000) from the base image,
+# then create the rtl user with the host-matching UID/GID.
+RUN userdel -r node 2>/dev/null; groupdel node 2>/dev/null; \
+    groupadd -g ${GID} rtl \
+    && useradd -u ${UID} -g ${GID} -m -d /data -s /bin/bash rtl
+
+# Copy built application from builder
+COPY --from=builder --chown=rtl:rtl /build /app
+
+USER rtl
+WORKDIR /app
+
+EXPOSE 3000
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+    CMD nc -z localhost 3000 || exit 1
+
+ENTRYPOINT ["node", "rtl"]

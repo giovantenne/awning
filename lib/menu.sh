@@ -14,17 +14,17 @@ show_menu() {
         draw_header "AWNING v2.0" ""
         echo -e "  ${status_label}"
         echo ""
-        echo -e "  ${BOLD}${YELLOW}1)${NC} Status        ${DIM}Dashboard with sync progress${NC}"
-        echo -e "  ${BOLD}${YELLOW}2)${NC} Logs          ${DIM}View service logs${NC}"
-        echo -e "  ${BOLD}${YELLOW}3)${NC} Connections   ${DIM}Tor addresses, LND connect URI${NC}"
-        echo -e "  ${BOLD}${YELLOW}4)${NC} Wallet        ${DIM}Create, unlock, balances${NC}"
-        echo -e "  ${BOLD}${YELLOW}5)${NC} Tools         ${DIM}Start, stop, rebuild, CLI${NC}"
-        echo -e "  ${BOLD}${YELLOW}6)${NC} Backup        ${DIM}SCB status, manual trigger${NC}"
-        echo -e "  ${BOLD}${YELLOW}0)${NC} Exit"
+        echo -e "  ${BOLD}${WHITE}1)${NC} Status        ${DIM}Dashboard with sync progress${NC}"
+        echo -e "  ${BOLD}${WHITE}2)${NC} Logs          ${DIM}View service logs${NC}"
+        echo -e "  ${BOLD}${WHITE}3)${NC} Connections   ${DIM}Tor addresses, LND connect URI${NC}"
+        echo -e "  ${BOLD}${WHITE}4)${NC} Wallet        ${DIM}Create, unlock, balances${NC}"
+        echo -e "  ${BOLD}${WHITE}5)${NC} Tools         ${DIM}Start, stop, rebuild, CLI${NC}"
+        echo -e "  ${BOLD}${WHITE}6)${NC} Backup        ${DIM}SCB status, manual trigger${NC}"
+        echo -e "  ${BOLD}${WHITE}0)${NC} Exit"
         echo ""
 
         local choice
-        read -r -p "$(echo -e "  ${CYAN}Choose [0-6]:${NC} ")" choice
+        read -r -p "$(echo -e "  ${YELLOW}Choose [0-6]:${NC} ")" choice
 
         case "$choice" in
             1) show_status 2>/dev/null; menu_pause ;;
@@ -50,18 +50,19 @@ menu_logs() {
     clear 2>/dev/null || true
     draw_header "VIEW LOGS" ""
     echo ""
-    echo -e "  ${BOLD}${YELLOW}1)${NC} All services"
-    echo -e "  ${BOLD}${YELLOW}2)${NC} Bitcoin Core"
-    echo -e "  ${BOLD}${YELLOW}3)${NC} LND"
-    echo -e "  ${BOLD}${YELLOW}4)${NC} Electrs"
-    echo -e "  ${BOLD}${YELLOW}5)${NC} Tor"
-    echo -e "  ${BOLD}${YELLOW}6)${NC} Nginx"
-    echo -e "  ${BOLD}${YELLOW}7)${NC} SCB"
-    echo -e "  ${BOLD}${YELLOW}0)${NC} Back"
+    echo -e "  ${BOLD}${WHITE}1)${NC} All services"
+    echo -e "  ${BOLD}${WHITE}2)${NC} Bitcoin Core"
+    echo -e "  ${BOLD}${WHITE}3)${NC} LND"
+    echo -e "  ${BOLD}${WHITE}4)${NC} Electrs"
+    echo -e "  ${BOLD}${WHITE}5)${NC} Tor"
+    echo -e "  ${BOLD}${WHITE}6)${NC} Nginx"
+    echo -e "  ${BOLD}${WHITE}7)${NC} SCB"
+    echo -e "  ${BOLD}${WHITE}8)${NC} RTL"
+    echo -e "  ${BOLD}${WHITE}0)${NC} Back"
     echo ""
 
     local choice
-    read -r -p "$(echo -e "  ${CYAN}Service [0-7]:${NC} ")" choice
+    read -r -p "$(echo -e "  ${YELLOW}Service [0-8]:${NC} ")" choice
 
     local service=""
     case "$choice" in
@@ -72,6 +73,7 @@ menu_logs() {
         5) service="tor" ;;
         6) service="nginx" ;;
         7) service="scb" ;;
+        8) service="rtl" ;;
         0|"") return ;;
         *) return ;;
     esac
@@ -109,17 +111,17 @@ menu_tools() {
     clear 2>/dev/null || true
     draw_header "TOOLS" ""
     echo ""
-    echo -e "  ${BOLD}${YELLOW}1)${NC} Start          ${DIM}Start all services${NC}"
-    echo -e "  ${BOLD}${YELLOW}2)${NC} Stop           ${DIM}Stop all services${NC}"
-    echo -e "  ${BOLD}${YELLOW}3)${NC} Restart        ${DIM}Restart all services${NC}"
-    echo -e "  ${BOLD}${YELLOW}4)${NC} Rebuild        ${DIM}Rebuild and restart${NC}"
-    echo -e "  ${BOLD}${YELLOW}5)${NC} Bitcoin CLI    ${DIM}Interactive bitcoin-cli${NC}"
-    echo -e "  ${BOLD}${YELLOW}6)${NC} LND CLI        ${DIM}Interactive lncli${NC}"
-    echo -e "  ${BOLD}${YELLOW}0)${NC} Back"
+    echo -e "  ${BOLD}${WHITE}1)${NC} Start          ${DIM}Start all services${NC}"
+    echo -e "  ${BOLD}${WHITE}2)${NC} Stop           ${DIM}Stop all services${NC}"
+    echo -e "  ${BOLD}${WHITE}3)${NC} Restart        ${DIM}Restart all services${NC}"
+    echo -e "  ${BOLD}${WHITE}4)${NC} Rebuild        ${DIM}Rebuild and restart${NC}"
+    echo -e "  ${BOLD}${WHITE}5)${NC} Bitcoin CLI    ${DIM}Interactive bitcoin-cli${NC}"
+    echo -e "  ${BOLD}${WHITE}6)${NC} LND CLI        ${DIM}Interactive lncli${NC}"
+    echo -e "  ${BOLD}${WHITE}0)${NC} Back"
     echo ""
 
     local choice
-    read -r -p "$(echo -e "  ${CYAN}Choose [0-6]:${NC} ")" choice
+    read -r -p "$(echo -e "  ${YELLOW}Choose [0-6]:${NC} ")" choice
 
     case "$choice" in
         1)  echo ""
@@ -175,15 +177,15 @@ menu_wallet() {
         clear 2>/dev/null || true
         draw_header "WALLET" ""
         echo ""
-        echo -e "  ${BOLD}${YELLOW}1)${NC} Wallet balance    ${DIM}On-chain balance${NC}"
-        echo -e "  ${BOLD}${YELLOW}2)${NC} Channel balance   ${DIM}Lightning balance${NC}"
-        echo -e "  ${BOLD}${YELLOW}3)${NC} New address       ${DIM}Generate on-chain address${NC}"
-        echo -e "  ${BOLD}${YELLOW}4)${NC} Zeus connect      ${DIM}Connection URI for Zeus${NC}"
-        echo -e "  ${BOLD}${YELLOW}0)${NC} Back"
+        echo -e "  ${BOLD}${WHITE}1)${NC} Wallet balance    ${DIM}On-chain balance${NC}"
+        echo -e "  ${BOLD}${WHITE}2)${NC} Channel balance   ${DIM}Lightning balance${NC}"
+        echo -e "  ${BOLD}${WHITE}3)${NC} New address       ${DIM}Generate on-chain address${NC}"
+        echo -e "  ${BOLD}${WHITE}4)${NC} Zeus connect      ${DIM}Connection URI for Zeus${NC}"
+        echo -e "  ${BOLD}${WHITE}0)${NC} Back"
         echo ""
 
         local choice
-        read -r -p "$(echo -e "  ${CYAN}Choose [0-4]:${NC} ")" choice
+        read -r -p "$(echo -e "  ${YELLOW}Choose [0-4]:${NC} ")" choice
 
         case "$choice" in
             1) echo ""; require_wallet && show_wallet_balance_ui; menu_pause ;;
@@ -357,13 +359,13 @@ menu_backup() {
     fi
 
     echo ""
-    echo -e "  ${BOLD}${YELLOW}1)${NC} Trigger backup now    ${DIM}Force a manual backup${NC}"
-    echo -e "  ${BOLD}${YELLOW}2)${NC} View SCB logs         ${DIM}Recent backup activity${NC}"
-    echo -e "  ${BOLD}${YELLOW}0)${NC} Back"
+    echo -e "  ${BOLD}${WHITE}1)${NC} Trigger backup now    ${DIM}Force a manual backup${NC}"
+    echo -e "  ${BOLD}${WHITE}2)${NC} View SCB logs         ${DIM}Recent backup activity${NC}"
+    echo -e "  ${BOLD}${WHITE}0)${NC} Back"
     echo ""
 
     local choice
-    read -r -p "$(echo -e "  ${CYAN}Choose [0-2]:${NC} ")" choice
+    read -r -p "$(echo -e "  ${YELLOW}Choose [0-2]:${NC} ")" choice
 
     case "$choice" in
         1)
@@ -409,7 +411,8 @@ menu_bitcoin_cli() {
         read -r -p "$(echo -e "  ${YELLOW}bitcoin-cli>${NC} ")" cmd || break
         [[ "$cmd" == "exit" || "$cmd" == "quit" ]] && break
         [[ -z "$cmd" ]] && continue
-        bitcoin_cli $cmd 2>/dev/null || true
+        # shellcheck disable=SC2086
+        _dc exec -T bitcoin bitcoin-cli -datadir=/data/.bitcoin $cmd 2>/dev/null || true
     done
 }
 
@@ -431,6 +434,7 @@ menu_lncli() {
         read -r -p "$(echo -e "  ${YELLOW}lncli>${NC} ")" cmd || break
         [[ "$cmd" == "exit" || "$cmd" == "quit" ]] && break
         [[ -z "$cmd" ]] && continue
-        lncli $cmd 2>/dev/null || true
+        # shellcheck disable=SC2086
+        _dc exec -T lnd lncli --network "${BITCOIN_NETWORK}" $cmd 2>/dev/null || true
     done
 }

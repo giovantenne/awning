@@ -1,19 +1,31 @@
 #!/bin/bash
-# Awning v2: Docker compose wrappers
-# Auto-detects sudo requirement and provides consistent interface
+# Awning v2: Docker Compose wrappers
+# Auto-detects sudo requirement, compose variant, and provides consistent interface
+
+# ============================================================
+# Service definitions
+# ============================================================
 
 # Core services in dependency order (always started)
 CORE_SERVICES=(tor bitcoin lnd electrs nginx)
 
 # All services including optional ones
 # SCB is only included when SCB_REPO is configured
+# RTL is only included when RTL_PASSWORD is configured
 dc_active_services() {
     local services=("${CORE_SERVICES[@]}")
     if [[ -n "${SCB_REPO:-}" ]]; then
         services+=(scb)
     fi
+    if [[ -n "${RTL_PASSWORD:-}" ]]; then
+        services+=(rtl)
+    fi
     echo "${services[@]}"
 }
+
+# ============================================================
+# Docker detection and auto-configuration
+# ============================================================
 
 # Detect if sudo is needed for docker (cached)
 _DOCKER_NEEDS_SUDO=""
@@ -88,7 +100,9 @@ _docker() {
     fi
 }
 
-# --- Compose wrappers ---
+# ============================================================
+# Compose wrappers
+# ============================================================
 
 dc_up() {
     _dc up -d "$@"
@@ -194,14 +208,21 @@ dc_build_services() {
     local build_log
     build_log="$(awning_path .build.log)"
 
+    local total_width=${#total}
+    # Find longest service name for alignment
+    local max_svc_len=0
+    for service in "${services[@]}"; do
+        [[ ${#service} -gt $max_svc_len ]] && max_svc_len=${#service}
+    done
+
     for service in "${services[@]}"; do
         ((i++))
+        local padded_i padded_svc
+        padded_i="$(printf "%${total_width}d" "$i")"
+        padded_svc="$(printf "%-${max_svc_len}s" "$service")"
         _dc build "$service" > "$build_log" 2>&1 &
         local build_pid=$!
-        if spinner "$build_pid" "Building ${service}... (${i}/${total})"; then
-            print_check "${service} built"
-        else
-            print_fail "${service} build failed"
+        if ! spinner "$build_pid" "Building ${padded_svc}  (${padded_i}/${total})"; then
             echo ""
             echo -e "  ${DIM}--- Last 30 lines of build output ---${NC}"
             tail -30 "$build_log" | while IFS= read -r line; do
@@ -242,12 +263,20 @@ dc_start_services() {
     echo ""
 
     local total=${#services[@]}
+    local total_width=${#total}
+    local max_svc_len=0
+    for service in "${services[@]}"; do
+        [[ ${#service} -gt $max_svc_len ]] && max_svc_len=${#service}
+    done
     local i=0
     for service in "${services[@]}"; do
         ((i++))
+        local padded_i padded_svc
+        padded_i="$(printf "%${total_width}d" "$i")"
+        padded_svc="$(printf "%-${max_svc_len}s" "$service")"
         _dc up -d "$service" >/dev/null 2>&1 &
         local up_pid=$!
-        if ! spinner "$up_pid" "Starting ${service}... (${i}/${total})"; then
+        if ! spinner "$up_pid" "Starting ${padded_svc}  (${padded_i}/${total})"; then
             print_fail "${service} failed to start"
         fi
     done
@@ -272,7 +301,7 @@ dc_start_services() {
                     if [[ -n "$progress" ]]; then
                         local pct
                         pct="$(echo "$progress" | awk '{printf "%.2f", $1 * 100}')"
-                        if (( $(echo "$pct < 99.9" | bc -l 2>/dev/null || echo 1) )); then
+                        if awk "BEGIN {exit ($pct >= 99.9)}" 2>/dev/null; then
                             annotation="${DIM}(syncing: ${pct}%)${NC}"
                         fi
                     fi
@@ -314,14 +343,22 @@ dc_stop_services() {
     echo ""
 
     local total=${#services[@]}
+    local total_width=${#total}
+    local max_svc_len=0
+    for service in "${services[@]}"; do
+        [[ ${#service} -gt $max_svc_len ]] && max_svc_len=${#service}
+    done
     local i=0
     local idx
     for ((idx = total - 1; idx >= 0; idx--)); do
         local service="${services[idx]}"
         ((i++))
+        local padded_i padded_svc
+        padded_i="$(printf "%${total_width}d" "$i")"
+        padded_svc="$(printf "%-${max_svc_len}s" "$service")"
         _dc stop "$service" >/dev/null 2>&1 &
         local stop_pid=$!
-        if ! spinner "$stop_pid" "Stopping ${service}... (${i}/${total})"; then
+        if ! spinner "$stop_pid" "Stopping ${padded_svc}  (${padded_i}/${total})"; then
             print_fail "${service} failed to stop"
         fi
     done
@@ -334,13 +371,21 @@ dc_stop_services() {
     fi
 }
 
-# --- Convenience shortcuts ---
+# ============================================================
+# Convenience shortcuts
+# ============================================================
 
+# Non-interactive exec (for scripted/status queries)
 bitcoin_cli() {
-    dc_exec bitcoin bitcoin-cli -datadir=/data/.bitcoin "$@"
+    dc_exec -T bitcoin bitcoin-cli -datadir=/data/.bitcoin "$@"
 }
 
 lncli() {
+    dc_exec -T lnd lncli --network "${BITCOIN_NETWORK}" "$@"
+}
+
+# Interactive exec (for wallet creation, manual CLI)
+lncli_interactive() {
     dc_exec lnd lncli --network "${BITCOIN_NETWORK}" "$@"
 }
 

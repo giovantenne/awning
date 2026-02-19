@@ -20,6 +20,7 @@ services:
     restart: unless-stopped
     networks:
       - tor_net
+      - awning_net
     volumes:
       - ./configs/torrc:/etc/tor/torrc:ro
       - ./data/tor:/var/lib/tor
@@ -137,3 +138,27 @@ services:
     volumes:
       - ./data/lnd:/lnd:ro
       - ./data/scb:/data
+
+  # --- Ride The Lightning (web UI) ---
+  rtl:
+    build:
+      context: ./dockerfiles
+      dockerfile: Dockerfile.rtl
+      args:
+        RTL_VERSION: ${RTL_VERSION:-0.15.8}
+        UID: ${HOST_UID}
+        GID: ${HOST_GID}
+    container_name: rtl
+    restart: unless-stopped
+    networks:
+      - awning_net
+    depends_on:
+      lnd:
+        condition: service_started
+    ports:
+      - "${RTL_BIND:-127.0.0.1}:${RTL_PORT:-3000}:3000"
+    environment:
+      RTL_CONFIG_PATH: /data/rtl
+    volumes:
+      - ./data/lnd:/data/lnd:ro
+      - ./data/rtl:/data/rtl

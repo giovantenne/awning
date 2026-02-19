@@ -49,11 +49,17 @@ if [[ ! -f "${SSH_KEY}.pub" ]]; then
 fi
 
 # known_hosts bootstrap (avoids interactive prompt)
+# Extract the git host from SCB_REPO (supports any git@host:user/repo.git format)
+SCB_GIT_HOST=""
+if [[ "${SCB_REPO:-}" =~ ^git@([^:]+): ]]; then
+    SCB_GIT_HOST="${BASH_REMATCH[1]}"
+fi
+
 touch /data/.ssh/known_hosts
-if ! ssh-keygen -F github.com -f /data/.ssh/known_hosts >/dev/null 2>&1; then
-    log "Fetching github.com host keys..."
+if [[ -n "$SCB_GIT_HOST" ]] && ! ssh-keygen -F "$SCB_GIT_HOST" -f /data/.ssh/known_hosts >/dev/null 2>&1; then
+    log "Fetching ${SCB_GIT_HOST} host keys..."
     delay=2
-    while ! ssh-keyscan -t ed25519,ecdsa,rsa github.com >> /data/.ssh/known_hosts 2>/dev/null; do
+    while ! ssh-keyscan -t ed25519,ecdsa,rsa "$SCB_GIT_HOST" >> /data/.ssh/known_hosts 2>/dev/null; do
         log "ssh-keyscan failed, retrying in ${delay}s..."
         sleep "${delay}"
         delay=$(( delay * 2 > MAX_RETRY_DELAY ? MAX_RETRY_DELAY : delay * 2 ))

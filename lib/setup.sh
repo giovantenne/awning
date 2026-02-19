@@ -5,9 +5,10 @@
 
 # --- Setup constants ---
 REQUIRED_DISK_GB=900
-FALLBACK_BITCOIN_VERSION="29.1"
-FALLBACK_LND_VERSION="0.19.3-beta"
-FALLBACK_ELECTRS_VERSION="0.10.10"
+FALLBACK_BITCOIN_VERSION="30.2"
+FALLBACK_LND_VERSION="0.20.1-beta"
+FALLBACK_ELECTRS_VERSION="0.11.0"
+FALLBACK_RTL_VERSION="0.15.8"
 
 # Update or append a KEY=VALUE pair in a .env file.
 # If the key already exists, its value is replaced in-place.
@@ -29,6 +30,7 @@ run_setup() {
     step_prerequisites "$ignore_disk_space"
     step_node_config
     step_scb_config
+    step_rtl_config
     step_generate_configs
     if ! step_build_and_start; then
         return 1
@@ -60,7 +62,7 @@ step_prerequisites() {
         print_check "Docker v${docker_ver}"
     else
         print_fail "Docker not found"
-        print_info "Install: https://docs.docker.com/engine/install/"
+        print_info "Install: ${WHITE}${UNDERLINE}https://docs.docker.com/engine/install/${NC}"
         missing=1
     fi
 
@@ -141,14 +143,14 @@ choose_version_from_list() {
 
     local i=1
     for opt in "${options[@]}"; do
-        echo -e "    ${BOLD}${YELLOW}${i})${NC} ${opt}" >&2
+        echo -e "    ${BOLD}${WHITE}${i})${NC} ${opt}" >&2
         ((i++))
     done
-    echo -e "    ${BOLD}${YELLOW}${i})${NC} Custom" >&2
+    echo -e "    ${BOLD}${WHITE}${i})${NC} Custom" >&2
 
     while true; do
         local choice
-        read -r -p "  Choose [default ${default}]: " choice < /dev/tty
+        read -r -p "$(echo -e "  ${YELLOW}Choose [default ${default}]:${NC} ")" choice < /dev/tty
 
         if [[ -z "$choice" ]]; then
             echo "$default"
@@ -158,7 +160,7 @@ choose_version_from_list() {
         if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#options[@]} + 1 )); then
             if (( choice == ${#options[@]} + 1 )); then
                 local custom
-                read -r -p "  Enter ${label} version [${default}]: " custom < /dev/tty
+                read -r -p "$(echo -e "  ${YELLOW}Enter ${label} version${NC} ${DIM}[${default}]${NC}: ")" custom < /dev/tty
                 echo "${custom:-$default}"
                 return
             fi
@@ -256,20 +258,20 @@ select_version_interactive() {
     local default_choice=1
     local custom_default="$latest"
     if [[ -n "$current_value" ]]; then
-        echo -e "    ${BOLD}${YELLOW}1)${NC} Keep current (${current_value})" >&2
-        echo -e "    ${BOLD}${YELLOW}2)${NC} Latest (${latest})" >&2
-        echo -e "    ${BOLD}${YELLOW}3)${NC} Custom version" >&2
-        echo -e "    ${BOLD}${YELLOW}4)${NC} Show recent releases" >&2
+        echo -e "    ${BOLD}${WHITE}1)${NC} Keep current (${current_value})" >&2
+        echo -e "    ${BOLD}${WHITE}2)${NC} Latest (${latest})" >&2
+        echo -e "    ${BOLD}${WHITE}3)${NC} Custom version" >&2
+        echo -e "    ${BOLD}${WHITE}4)${NC} Show recent releases" >&2
         custom_default="$current_value"
     else
-        echo -e "    ${BOLD}${YELLOW}1)${NC} Latest (${latest})" >&2
-        echo -e "    ${BOLD}${YELLOW}2)${NC} Custom version" >&2
-        echo -e "    ${BOLD}${YELLOW}3)${NC} Show recent releases" >&2
+        echo -e "    ${BOLD}${WHITE}1)${NC} Latest (${latest})" >&2
+        echo -e "    ${BOLD}${WHITE}2)${NC} Custom version" >&2
+        echo -e "    ${BOLD}${WHITE}3)${NC} Show recent releases" >&2
     fi
 
     while true; do
         local choice
-        read -r -p "  Choose [default ${default_choice}]: " choice < /dev/tty
+        read -r -p "$(echo -e "  ${YELLOW}Choose [default ${default_choice}]:${NC} ")" choice < /dev/tty
         choice="${choice:-$default_choice}"
 
         case "$choice" in
@@ -287,14 +289,14 @@ select_version_interactive() {
                     return
                 fi
                 local custom
-                read -r -p "  Enter ${label} version [${custom_default}]: " custom < /dev/tty
+                read -r -p "$(echo -e "  ${YELLOW}Enter ${label} version${NC} ${DIM}[${custom_default}]${NC}: ")" custom < /dev/tty
                 echo "${custom:-$custom_default}"
                 return
                 ;;
             3)
                 if [[ -n "$current_value" ]]; then
                     local custom
-                    read -r -p "  Enter ${label} version [${custom_default}]: " custom < /dev/tty
+                    read -r -p "$(echo -e "  ${YELLOW}Enter ${label} version${NC} ${DIM}[${custom_default}]${NC}: ")" custom < /dev/tty
                     echo "${custom:-$custom_default}"
                     return
                 fi
@@ -335,7 +337,7 @@ select_version_interactive() {
 }
 
 step_node_config() {
-    print_step "Step 1/6: Node Configuration"
+    print_step "Step 1/7: Node Configuration"
 
     # Auto-detect architecture
     local arch
@@ -411,7 +413,7 @@ EOF
 # Step 2: SCB configuration
 # ============================================================
 step_scb_config() {
-    print_step "Step 2/6: Channel Backup (SCB)"
+    print_step "Step 2/7: Channel Backup (SCB)"
     echo ""
     print_info "SCB automatically backs up your Lightning channel state to GitHub."
     print_info "You need a private GitHub repository and an SSH deploy key."
@@ -420,14 +422,15 @@ step_scb_config() {
     local existing_scb_repo="${SCB_REPO:-}"
     local default_enable="y"
     if [[ -n "$existing_scb_repo" ]]; then
-        print_info "Current SCB repository: ${CYAN}${existing_scb_repo}${NC}"
+        print_info "Current SCB repository: ${WHITE}${UNDERLINE}${existing_scb_repo}${NC}"
     fi
 
     if confirm "Enable Static Channel Backup?" "$default_enable"; then
         local scb_repo
-        print_info "Need a private GitHub repo? Create one at: ${CYAN}https://github.com/new${NC}"
+        print_info "Need a private GitHub repo? Create one at: ${WHITE}${UNDERLINE}https://github.com/new${NC}"
+        print_info "Format: ${DIM}git@github.com:user/lnd-backup.git${NC}"
         while true; do
-            scb_repo="$(read_input "GitHub SSH URL (e.g. git@github.com:user/lnd-backup.git)" "$existing_scb_repo")"
+            scb_repo="$(read_input "GitHub SSH URL" "$existing_scb_repo")"
             if [[ -z "$scb_repo" ]]; then
                 if [[ -n "$existing_scb_repo" ]]; then
                     scb_repo="$existing_scb_repo"
@@ -503,13 +506,13 @@ step_scb_config() {
                 local gh_owner gh_repo
                 gh_owner="${BASH_REMATCH[1]}"
                 gh_repo="${BASH_REMATCH[2]}"
-                echo -e "  ${BOLD}Add this key at:${NC} ${CYAN}https://github.com/${gh_owner}/${gh_repo}/settings/keys/new${NC}"
+                echo -e "  ${BOLD}Add this key at:${NC} ${WHITE}${UNDERLINE}https://github.com/${gh_owner}/${gh_repo}/settings/keys/new${NC}"
             else
                 echo -e "  ${BOLD}Add this key in your repository Deploy Keys settings.${NC}"
             fi
-            echo -e "  ${BOLD}Title:${NC} ${YELLOW}${key_title}${NC}"
-            echo -e "  ${BOLD}Key:${NC}   ${YELLOW}${pubkey}${NC}"
-            echo -e "  ${BOLD}(Enable Allow write access)${NC}"
+            echo -e "  ${BOLD}Title:${NC} ${RED}${key_title}${NC}"
+            echo -e "  ${BOLD}Key:${NC}   ${RED}${pubkey}${NC}"
+            echo -e "  ${BOLD}${RED}(Enable Allow write access)${NC}"
             echo ""
 
             # Test write access (dry-run push) if git+ssh are available
@@ -567,10 +570,83 @@ step_scb_config() {
 }
 
 # ============================================================
-# Step 3: Generate configs from templates
+# Step 3: RTL (Ride The Lightning) web interface
+# ============================================================
+step_rtl_config() {
+    print_step "Step 3/7: RTL Web Interface"
+    echo ""
+    print_info "RTL provides a browser-based interface for managing your Lightning node."
+    print_info "It runs locally and connects to LND over the Docker network."
+    echo ""
+
+    local existing_rtl_password="${RTL_PASSWORD:-}"
+    if [[ -n "$existing_rtl_password" ]]; then
+        print_info "RTL is currently ${BOLD}enabled${NC}"
+    fi
+
+    if confirm "Enable RTL web interface?" "y"; then
+        # RTL version selection
+        local rtl_version
+        rtl_version="$(select_version_interactive "RTL" "Ride-The-Lightning/RTL" "$FALLBACK_RTL_VERSION" "${RTL_VERSION:-}")"
+
+        # RTL password
+        local rtl_password
+        if [[ -n "$existing_rtl_password" ]]; then
+            echo ""
+            print_info "Current RTL password is set."
+            if confirm "Keep current RTL password?" "y"; then
+                rtl_password="$existing_rtl_password"
+            else
+                while true; do
+                    rtl_password="$(read_password "New RTL password")"
+                    if validate_password "$rtl_password" "$MIN_PASSWORD_LENGTH"; then
+                        break
+                    fi
+                done
+            fi
+        else
+            echo ""
+            print_info "Choose a password for the RTL web interface."
+            while true; do
+                rtl_password="$(read_password "RTL password")"
+                if validate_password "$rtl_password" "$MIN_PASSWORD_LENGTH"; then
+                    break
+                fi
+            done
+        fi
+
+        # RTL bind address and port
+        local rtl_bind="${RTL_BIND:-127.0.0.1}"
+        local rtl_port="${RTL_PORT:-3000}"
+
+        # Save to .env
+        local env_file
+        env_file="$(awning_path .env)"
+        _env_set "$env_file" "RTL_VERSION" "$rtl_version"
+        _env_set "$env_file" "RTL_PASSWORD" "$rtl_password"
+        _env_set "$env_file" "RTL_BIND" "$rtl_bind"
+        _env_set "$env_file" "RTL_PORT" "$rtl_port"
+        export RTL_VERSION="$rtl_version"
+        export RTL_PASSWORD="$rtl_password"
+        export RTL_BIND="$rtl_bind"
+        export RTL_PORT="$rtl_port"
+
+        echo ""
+        print_check "RTL enabled (v${rtl_version}, port ${rtl_port})"
+    else
+        local env_file
+        env_file="$(awning_path .env)"
+        _env_set "$env_file" "RTL_PASSWORD" ""
+        export RTL_PASSWORD=""
+        print_info "RTL disabled"
+    fi
+}
+
+# ============================================================
+# Step 4: Generate configs from templates
 # ============================================================
 step_generate_configs() {
-    print_step "Step 3/6: Generating Configuration"
+    print_step "Step 4/7: Generating Configuration"
 
     # Keep existing credentials on setup rerun to avoid RPC auth mismatches.
     local rpc_user rpc_password tor_password
@@ -632,11 +708,48 @@ step_generate_configs() {
         "${configs_dir}/torrc.template" > "${configs_dir}/torrc"
     print_check "torrc"
 
+    # rtl.conf (only when RTL is enabled)
+    if [[ -n "${RTL_PASSWORD:-}" ]]; then
+        local node_alias
+        node_alias="${NODE_ALIAS:-AwningNode}"
+        sed -e "s|{{RTL_PASSWORD}}|${RTL_PASSWORD}|g" \
+            -e "s|{{NODE_ALIAS}}|${node_alias}|g" \
+            "${configs_dir}/rtl.conf.template" > "${configs_dir}/rtl.conf"
+        # RTL needs the config in its data dir (it writes to it at runtime)
+        local rtl_dir rtl_config
+        rtl_dir="$(awning_path data/rtl)"
+        rtl_config="${rtl_dir}/RTL-Config.json"
+        mkdir -p "$rtl_dir"
+        if [[ ! -w "$rtl_dir" ]]; then
+            local owner_uid owner_gid
+            owner_uid="${HOST_UID:-$(id -u)}"
+            owner_gid="${HOST_GID:-$(id -g)}"
+            if command -v sudo &>/dev/null; then
+                sudo chown -R "${owner_uid}:${owner_gid}" "$rtl_dir" 2>/dev/null || true
+            else
+                chown -R "${owner_uid}:${owner_gid}" "$rtl_dir" 2>/dev/null || true
+            fi
+        fi
+        if [[ -e "$rtl_config" ]] && [[ ! -w "$rtl_config" ]]; then
+            if command -v sudo &>/dev/null; then
+                sudo rm -f "$rtl_config" 2>/dev/null || true
+            else
+                rm -f "$rtl_config" 2>/dev/null || true
+            fi
+        fi
+        cp "${configs_dir}/rtl.conf" "$rtl_config" 2>/dev/null || true
+        if [[ ! -s "${configs_dir}/rtl.conf" ]] || [[ ! -s "$rtl_config" ]]; then
+            print_fail "RTL config generation failed (empty or unwritable config)"
+            return 1
+        fi
+        print_check "rtl.conf"
+    fi
+
     # .env
     print_check ".env"
 
     # Create data directories
-    for dir in bitcoin lnd electrs tor scb; do
+    for dir in bitcoin lnd electrs tor scb rtl; do
         mkdir -p "$(awning_path "data/${dir}")"
     done
 }
@@ -716,7 +829,7 @@ PY
 # Step 4: Build Docker images
 # ============================================================
 step_build_and_start() {
-    print_step "Step 4/6: Building Docker Images"
+    print_step "Step 5/7: Building Docker Images"
     echo ""
     print_info "Building Electrs from source can take ${BOLD}up to 1 hour${NC} on ARM."
     echo ""
@@ -733,8 +846,8 @@ step_build_and_start() {
         return 1
     fi
 
-    # Step 5: Start services
-    print_step "Step 5/6: Starting Services"
+    # Step 6: Start services
+    print_step "Step 6/7: Starting Services"
     echo ""
     ensure_lnd_password_file
     dc_start_services
@@ -744,7 +857,7 @@ step_build_and_start() {
 # Step 6: Initialize LND wallet
 # ============================================================
 step_initialize_wallet() {
-    print_step "Step 6/6: Initialize LND Wallet"
+    print_step "Step 7/7: Initialize LND Wallet"
     echo ""
 
     local macaroon
