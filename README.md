@@ -1,8 +1,8 @@
 # Awning
 
-A fully dockerized Bitcoin + Lightning node.
+A portable, TUI-first Bitcoin + Lightning node stack.
 
-Awning is designed to be simple to run, easy to inspect, and portable across hosts. It aims for a no-frills setup focused on Bitcoin Core, LND, Electrs, Tor, and automatic static channel backups (SCB).
+Awning is designed for a terminal-first workflow with a guided TUI setup and operations menu, while staying portable across hosts through Docker. It delivers a no-frills Bitcoin/Lightning stack focused on Bitcoin Core, LND, Electrs, Tor, and automatic static channel backups (SCB).
 
 Awning keeps host dependencies minimal: Docker (+ compose plugin) is enough.
 
@@ -65,6 +65,16 @@ Useful options:
 - `./awning.sh setup --ignore-disk-space` (or `--force`)
 
 Rerunning setup keeps previously configured values as defaults (alias, versions, SCB repo, credentials) to avoid re-entering everything.
+
+## Upgrading From v1
+
+If you are coming from Awning v1, run setup again on v2:
+
+```sh
+./awning.sh setup
+```
+
+This regenerates v2 configs and validates existing values (including wallet/SCB settings) against the current stack.
 
 ## Main Commands
 
