@@ -451,8 +451,16 @@ step_scb_config() {
         mkdir -p "$scb_ssh_dir"
 
         local key_priv key_pub
-        key_priv="${scb_ssh_dir}/id_ed25519"
-        key_pub="${scb_ssh_dir}/id_ed25519.pub"
+        if [[ -f "${scb_ssh_dir}/id_ed25519" || -f "${scb_ssh_dir}/id_ed25519.pub" ]]; then
+            key_priv="${scb_ssh_dir}/id_ed25519"
+            key_pub="${scb_ssh_dir}/id_ed25519.pub"
+        elif [[ -f "${scb_ssh_dir}/id_rsa" || -f "${scb_ssh_dir}/id_rsa.pub" ]]; then
+            key_priv="${scb_ssh_dir}/id_rsa"
+            key_pub="${scb_ssh_dir}/id_rsa.pub"
+        else
+            key_priv="${scb_ssh_dir}/id_ed25519"
+            key_pub="${scb_ssh_dir}/id_ed25519.pub"
+        fi
 
         if [[ -f "$key_priv" && ! -f "$key_pub" ]]; then
             # Recover missing public key from existing private key.
@@ -462,13 +470,15 @@ step_scb_config() {
         fi
 
         if [[ -f "$key_priv" && -f "$key_pub" ]]; then
-            print_info "Reusing existing SCB SSH key"
+            print_info "Reusing existing SCB SSH key ($(basename "$key_priv"))"
         elif [[ -f "$key_pub" && ! -f "$key_priv" ]]; then
             print_warn "Found SCB public key without private key, generating a new key pair"
             rm -f "$key_pub"
         fi
 
         if [[ ! -f "$key_priv" ]]; then
+            key_priv="${scb_ssh_dir}/id_ed25519"
+            key_pub="${scb_ssh_dir}/id_ed25519.pub"
             if command -v ssh-keygen &>/dev/null; then
                 ssh-keygen -t ed25519 -f "$key_priv" -N "" -C "scb@awning" &>/dev/null
             else
@@ -525,7 +535,7 @@ step_scb_config() {
                     echo "write-check $(date)" > "${test_dir}/.scb-write-check"
                     git -C "$test_dir" add .scb-write-check
                     git -C "$test_dir" -c user.email="awning@backup" -c user.name="Awning SCB" commit -q -m "SCB write check"
-                    push_test="$(GIT_SSH_COMMAND="ssh -i ${scb_ssh_dir}/id_ed25519 -o UserKnownHostsFile=${scb_ssh_dir}/known_hosts -o StrictHostKeyChecking=yes" \
+                    push_test="$(GIT_SSH_COMMAND="ssh -i ${key_priv} -o UserKnownHostsFile=${scb_ssh_dir}/known_hosts -o StrictHostKeyChecking=yes" \
                         git -C "$test_dir" push --dry-run origin HEAD:refs/heads/${branch_name} 2>&1)" || true
                     rm -rf "$test_dir"
 

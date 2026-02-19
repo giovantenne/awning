@@ -9,19 +9,28 @@ SCB_SOURCE="/lnd/data/chain/bitcoin/mainnet/channel.backup"
 BACKUP_DIR="/data/backups"
 MAX_RETRY_DELAY=300  # 5 minutes max between retries
 HEARTBEAT_FILE="/tmp/scb_heartbeat"
+SSH_KEY=""
 
 log() { echo "[SCB] $(date '+%H:%M:%S') $*"; }
 heartbeat() { date +%s > "${HEARTBEAT_FILE}"; }
 
 # --- SSH key setup ---
-if [ ! -f /data/.ssh/id_ed25519 ]; then
+mkdir -p /data/.ssh
+if [ -f /data/.ssh/id_ed25519 ]; then
+    SSH_KEY="/data/.ssh/id_ed25519"
+elif [ -f /data/.ssh/id_rsa ]; then
+    SSH_KEY="/data/.ssh/id_rsa"
+else
     log "Generating SSH key..."
-    mkdir -p /data/.ssh
     ssh-keygen -t ed25519 -f /data/.ssh/id_ed25519 -N "" -q
+    SSH_KEY="/data/.ssh/id_ed25519"
+fi
+
+if [ ! -f "${SSH_KEY}.pub" ]; then
+    ssh-keygen -y -f "${SSH_KEY}" > "${SSH_KEY}.pub" 2>/dev/null || true
 fi
 
 # known_hosts bootstrap (avoids interactive prompt)
-mkdir -p /data/.ssh
 touch /data/.ssh/known_hosts
 if ! ssh-keygen -F github.com -f /data/.ssh/known_hosts >/dev/null 2>&1; then
     log "Fetching github.com host keys..."
@@ -34,10 +43,10 @@ if ! ssh-keygen -F github.com -f /data/.ssh/known_hosts >/dev/null 2>&1; then
 fi
 
 # Configure SSH for git operations
-export GIT_SSH_COMMAND="ssh -i /data/.ssh/id_ed25519 -o UserKnownHostsFile=/data/.ssh/known_hosts -o StrictHostKeyChecking=yes"
+export GIT_SSH_COMMAND="ssh -i ${SSH_KEY} -o UserKnownHostsFile=/data/.ssh/known_hosts -o StrictHostKeyChecking=yes"
 
 log "--- SSH Public Key (add this to your GitHub repo as a deploy key with write access) ---"
-cat /data/.ssh/id_ed25519.pub
+cat "${SSH_KEY}.pub"
 log "---"
 
 # --- Git config ---
