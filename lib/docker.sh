@@ -217,12 +217,13 @@ dc_start_services() {
 
     # Report status of each service
     for service in "${services[@]}"; do
-        local status
-        status="$(_dc ps --format '{{.Status}}' "$service" 2>/dev/null)" || status=""
+        local status health
+        status="$(_docker inspect --format '{{.State.Status}}' "$service" 2>/dev/null)" || status=""
+        health="$(_docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$service" 2>/dev/null)" || health=""
 
         if [[ -z "$status" ]]; then
             print_fail "${service} (not found)"
-        elif echo "$status" | grep -qi "up\|running\|healthy\|starting"; then
+        elif [[ "$status" == "running" || "$status" == "restarting" ]]; then
             local annotation=""
             case "$service" in
                 bitcoin)
@@ -247,7 +248,14 @@ dc_start_services() {
                     annotation="${DIM}(waiting for bitcoin sync)${NC}"
                     ;;
             esac
-            print_check "${service} ${annotation}"
+
+            if [[ "$status" == "running" && "$health" == "unhealthy" ]]; then
+                print_fail "${service} (unhealthy)"
+            elif [[ "$status" == "restarting" ]]; then
+                print_warn "${service} restarting ${annotation}"
+            else
+                print_check "${service} ${annotation}"
+            fi
         else
             print_fail "${service} (${status})"
         fi
