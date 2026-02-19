@@ -17,6 +17,7 @@ active_services() {
 
 # Detect if sudo is needed for docker (cached)
 _DOCKER_NEEDS_SUDO=""
+_COMPOSE_CMD=""
 _needs_sudo() {
     if [[ -z "$_DOCKER_NEEDS_SUDO" ]]; then
         if docker info &>/dev/null; then
@@ -28,14 +29,50 @@ _needs_sudo() {
     [[ "$_DOCKER_NEEDS_SUDO" == "yes" ]]
 }
 
+_detect_compose_cmd() {
+    [[ -n "$_COMPOSE_CMD" ]] && return 0
+
+    if docker compose version &>/dev/null 2>&1; then
+        _COMPOSE_CMD="docker-compose-plugin"
+        return 0
+    fi
+    if command -v docker-compose &>/dev/null 2>&1; then
+        _COMPOSE_CMD="docker-compose-standalone"
+        return 0
+    fi
+    if sudo docker compose version &>/dev/null 2>&1; then
+        _COMPOSE_CMD="docker-compose-plugin"
+        return 0
+    fi
+    if command -v docker-compose &>/dev/null 2>&1 && sudo docker-compose version &>/dev/null 2>&1; then
+        _COMPOSE_CMD="docker-compose-standalone"
+        return 0
+    fi
+
+    return 1
+}
+
 # Run docker compose with correct prefix
 _dc() {
     local compose_file
     compose_file="$(awning_path docker-compose.yml)"
-    if _needs_sudo; then
-        sudo docker compose -f "$compose_file" "$@"
+    if ! _detect_compose_cmd; then
+        print_fail "Neither 'docker compose' nor 'docker-compose' is available"
+        return 127
+    fi
+
+    if [[ "$_COMPOSE_CMD" == "docker-compose-plugin" ]]; then
+        if _needs_sudo; then
+            sudo docker compose -f "$compose_file" "$@"
+        else
+            docker compose -f "$compose_file" "$@"
+        fi
     else
-        docker compose -f "$compose_file" "$@"
+        if _needs_sudo; then
+            sudo docker-compose -f "$compose_file" "$@"
+        else
+            docker-compose -f "$compose_file" "$@"
+        fi
     fi
 }
 

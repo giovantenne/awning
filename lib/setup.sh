@@ -45,13 +45,19 @@ step_prerequisites() {
         missing=1
     fi
 
-    # Docker compose plugin
-    if docker compose version &>/dev/null 2>&1 || sudo docker compose version &>/dev/null 2>&1; then
+    # Docker compose (plugin or standalone)
+    if docker compose version &>/dev/null 2>&1 || sudo docker compose version &>/dev/null 2>&1 || \
+       docker-compose version &>/dev/null 2>&1 || sudo docker-compose version &>/dev/null 2>&1; then
         local compose_ver
-        compose_ver="$(docker compose version 2>/dev/null | grep -oP '\d+\.\d+(\.\d+)?' | head -1)" || compose_ver="unknown"
-        print_check "docker compose v${compose_ver}"
+        compose_ver="$(docker compose version 2>/dev/null | grep -oP '\d+\.\d+(\.\d+)?' | head -1)" || true
+        if [[ -z "$compose_ver" ]]; then
+            compose_ver="$(docker-compose version 2>/dev/null | grep -oP '\d+\.\d+(\.\d+)?' | head -1)" || compose_ver="unknown"
+            print_check "docker-compose v${compose_ver}"
+        else
+            print_check "docker compose v${compose_ver}"
+        fi
     else
-        print_fail "docker compose plugin not found"
+        print_fail "docker compose not found (plugin or standalone)"
         missing=1
     fi
 
@@ -64,19 +70,41 @@ step_prerequisites() {
     fi
 
     # Disk space check
-    local avail_kb avail_gb
+    # If data/bitcoin already contains blockchain data, count it as reusable space.
+    local avail_kb avail_gb existing_bitcoin_kb existing_bitcoin_gb effective_kb effective_gb
     avail_kb="$(df --output=avail "$(awning_path .)" 2>/dev/null | tail -1 | tr -d ' ')" || avail_kb=0
     avail_gb="$(echo "$avail_kb" | awk '{printf "%.1f", $1 / 1048576}')"
-    local avail_gb_int="${avail_gb%.*}"
+    existing_bitcoin_kb="$(du -sk "$(awning_path data/bitcoin)" 2>/dev/null | awk '{print $1}')" || existing_bitcoin_kb=0
+    existing_bitcoin_kb="${existing_bitcoin_kb:-0}"
+    existing_bitcoin_gb="$(echo "$existing_bitcoin_kb" | awk '{printf "%.1f", $1 / 1048576}')"
+    effective_kb=$((avail_kb + existing_bitcoin_kb))
+    effective_gb="$(echo "$effective_kb" | awk '{printf "%.1f", $1 / 1048576}')"
+    local effective_gb_int="${effective_gb%.*}"
 
-    if [[ "$avail_gb_int" -ge 900 ]]; then
-        print_check "Disk space: ${avail_gb} GB available (900 GB required)"
-    elif [[ "$avail_gb_int" -ge 600 ]]; then
-        print_warn "Disk space: ${avail_gb} GB available (900 GB recommended)"
+    if [[ "$effective_gb_int" -ge 900 ]]; then
+        if [[ "$existing_bitcoin_kb" -gt 0 ]]; then
+            print_check "Disk space: ${avail_gb} GB free + ${existing_bitcoin_gb} GB existing bitcoin data = ${effective_gb} GB effective (900 GB required)"
+        else
+            print_check "Disk space: ${avail_gb} GB available (900 GB required)"
+        fi
+    elif [[ "$effective_gb_int" -ge 600 ]]; then
+        if [[ "$existing_bitcoin_kb" -gt 0 ]]; then
+            print_warn "Disk space: ${avail_gb} GB free + ${existing_bitcoin_gb} GB existing bitcoin data = ${effective_gb} GB effective (900 GB recommended)"
+        else
+            print_warn "Disk space: ${avail_gb} GB available (900 GB recommended)"
+        fi
     elif [[ "$ignore_disk_space" == "1" ]]; then
-        print_warn "Disk space: ${avail_gb} GB available (below minimum, override enabled)"
+        if [[ "$existing_bitcoin_kb" -gt 0 ]]; then
+            print_warn "Disk space: ${avail_gb} GB free + ${existing_bitcoin_gb} GB existing bitcoin data = ${effective_gb} GB effective (below minimum, override enabled)"
+        else
+            print_warn "Disk space: ${avail_gb} GB available (below minimum, override enabled)"
+        fi
     else
-        print_fail "Disk space: ${avail_gb} GB available (900 GB required)"
+        if [[ "$existing_bitcoin_kb" -gt 0 ]]; then
+            print_fail "Disk space: ${avail_gb} GB free + ${existing_bitcoin_gb} GB existing bitcoin data = ${effective_gb} GB effective (900 GB required)"
+        else
+            print_fail "Disk space: ${avail_gb} GB available (900 GB required)"
+        fi
         missing=1
     fi
 
