@@ -24,13 +24,12 @@ Please read the [full disclaimer](DISCLAIMER.md) before using this project.
 ## Prerequisites
 
 - Docker with the [compose plugin](https://docs.docker.com/compose/install/linux/)
-- git
-- openssl
-- python3 (for setup only)
 
 ```sh
-sudo apt-get install -y docker.io docker-compose-v2 git openssl python3
+sudo apt-get install -y docker.io docker-compose-v2
 ```
+
+> **Note:** No other host dependencies are required. The setup wizard runs helper tooling in Docker containers (including Python-based steps), so Python is not required on the host.
 
 ## Quick start
 
@@ -42,10 +41,11 @@ cd awning
 
 The setup wizard will guide you through:
 1. Prerequisites check
-2. Node configuration (architecture auto-detected, versions, LND wallet password)
+2. Node configuration (architecture auto-detected, versions)
 3. Static Channel Backup configuration (GitHub SSH repository)
 4. Config generation (RPC auth, Tor passwords, all handled automatically)
 5. Build and start all services
+6. LND wallet initialization (auto-unlock password + wallet create)
 
 After setup, run `./awning.sh` again to open the interactive management menu.
 
@@ -82,9 +82,10 @@ Commands:
 
 | Port | Service | Description |
 | --- | --- | --- |
-| `8080` | LND | REST API (TLS) |
-| `50002` | Electrs via Nginx | Electrum protocol (SSL) |
+| `8080` | LND | REST API (TLS, configurable via `LND_REST_PORT`) |
+| `50002` | Electrs via Nginx | Electrum protocol (SSL, configurable via `ELECTRS_SSL_PORT`) |
 
+By default, both ports bind to `127.0.0.1` for safer local-only access. Set `LND_REST_BIND=0.0.0.0` and/or `ELECTRS_SSL_BIND=0.0.0.0` in `.env` for LAN exposure.
 Both services are also available as Tor hidden services (`.onion` addresses shown in `./awning.sh connections`).
 
 ## Connect your wallet
@@ -157,7 +158,7 @@ awning/
 
 - **RPC authentication**: Bitcoin Core uses `rpcauth` (HMAC-SHA256 hashed password) instead of cookie files. Credentials are auto-generated during setup.
 - **Tor control auth**: Uses hashed password instead of shared cookie file.
-- **Network isolation**: All services run on an isolated Docker bridge network (`172.28.0.0/16`). Only LND REST (8080) and Electrs SSL (50002) are exposed to the host.
+- **Network isolation**: Services run on isolated Docker bridge networks. Tor is on a dedicated network shared only with services that need it (`bitcoin`, `lnd`, `electrs`). Only LND REST (8080) and Electrs SSL (50002) are exposed to the host.
 - **Tor by default**: Bitcoin Core connects to peers via Tor (`proxy=tor:9050`).
 - **GPG verification**: Bitcoin Core and LND binaries are GPG-verified during Docker build.
 

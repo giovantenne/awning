@@ -8,15 +8,20 @@ ARG GID=1000
 RUN apt-get update && apt-get install -y --no-install-recommends \
     tor netcat-openbsd && rm -rf /var/lib/apt/lists/*
 
-# Create user with matching UID/GID
-RUN groupadd -g ${GID} tor \
-    && useradd -u ${UID} -g ${GID} -m -d /data -s /bin/bash tor
+COPY entrypoints/tor.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+# Align debian-tor user/group to host UID/GID for volume permissions
+RUN groupmod -g ${GID} debian-tor \
+    && usermod -u ${UID} -g ${GID} debian-tor \
+    && mkdir -p /run/tor \
+    && chown -R debian-tor:debian-tor /var/lib/tor /var/log/tor /run/tor
 
 EXPOSE 9050 9051
 
-USER tor
+USER debian-tor
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
     CMD nc -z localhost 9050 || exit 1
 
-ENTRYPOINT ["tor"]
+ENTRYPOINT ["/entrypoint.sh"]

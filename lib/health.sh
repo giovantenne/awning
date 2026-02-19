@@ -11,22 +11,28 @@ show_status() {
     echo -e "  ${BOLD}Services${NC}"
     echo ""
 
-    for service in "${ALL_SERVICES[@]}"; do
+    local services
+    read -ra services <<< "$(active_services)"
+    printf "  %-10s %-12s %s\n" "SERVICE" "STATE" "DETAILS"
+    echo -e "  ${DIM}---------------------------------------------${NC}"
+    for service in "${services[@]}"; do
         local status
-        status="$(eval "$(_compose_cmd) ps --format '{{.Status}}' ${service} 2>/dev/null")" || status=""
+        status="$(_dc ps --format '{{.Status}}' "$service" 2>/dev/null)" || status=""
 
         if [[ -z "$status" ]]; then
-            print_fail "${service}  ${DIM}not found${NC}"
-        elif echo "$status" | grep -qi "up\|running\|healthy"; then
-            local uptime
-            uptime="$(echo "$status" | grep -oP '\(\K[^)]+' | head -1)" || uptime=""
-            if [[ -n "$uptime" ]]; then
-                print_check "${service}  ${DIM}${uptime}${NC}"
-            else
-                print_check "${service}"
-            fi
+            printf "  %-10s ${RED}%-12s${NC} %s\n" "$service" "not found" ""
+        elif echo "$status" | grep -qi "restarting"; then
+            printf "  %-10s ${YELLOW}%-12s${NC} %s\n" "$service" "restarting" "$status"
+        elif echo "$status" | grep -qi "unhealthy"; then
+            printf "  %-10s ${RED}%-12s${NC} %s\n" "$service" "unhealthy" "$status"
+        elif echo "$status" | grep -qi "healthy"; then
+            printf "  %-10s ${GREEN}%-12s${NC} %s\n" "$service" "healthy" "$status"
+        elif echo "$status" | grep -qi "starting"; then
+            printf "  %-10s ${YELLOW}%-12s${NC} %s\n" "$service" "starting" "$status"
+        elif echo "$status" | grep -qi "up\|running"; then
+            printf "  %-10s ${GREEN}%-12s${NC} %s\n" "$service" "running" "$status"
         else
-            print_fail "${service}  ${DIM}${status}${NC}"
+            printf "  %-10s ${RED}%-12s${NC} %s\n" "$service" "error" "$status"
         fi
     done
 
@@ -156,10 +162,19 @@ show_connections() {
     echo ""
 
     echo -e "  ${BOLD}Local Network${NC}"
-    local local_ip
+    local local_ip lnd_bind lnd_port electrs_bind electrs_port lnd_host electrs_host
     local_ip="$(hostname -I 2>/dev/null | awk '{print $1}')" || local_ip="<your-ip>"
-    echo -e "    LND REST (TLS):  https://${local_ip}:8080"
-    echo -e "    Electrs (SSL):   ${local_ip}:50002"
+    lnd_bind="${LND_REST_BIND:-127.0.0.1}"
+    lnd_port="${LND_REST_PORT:-8080}"
+    electrs_bind="${ELECTRS_SSL_BIND:-127.0.0.1}"
+    electrs_port="${ELECTRS_SSL_PORT:-50002}"
+    lnd_host="${lnd_bind}"
+    electrs_host="${electrs_bind}"
+    [[ "$lnd_bind" == "0.0.0.0" ]] && lnd_host="$local_ip"
+    [[ "$electrs_bind" == "0.0.0.0" ]] && electrs_host="$local_ip"
+
+    echo -e "    LND REST (TLS):  https://${lnd_host}:${lnd_port}"
+    echo -e "    Electrs (SSL):   ${electrs_host}:${electrs_port}"
     echo ""
 
     # Tor addresses
@@ -208,15 +223,25 @@ zeus_connect() {
 
     local onion
     onion="$(cat "$lnd_onion")"
+    local macaroon
+    macaroon="$(awning_path data/lnd/data/chain/bitcoin/mainnet/admin.macaroon)"
+
+    if [[ ! -f "$macaroon" ]]; then
+        print_fail "LND admin macaroon not found (create and unlock wallet first)"
+        return 1
+    fi
 
     print_info "Generating lndconnect URI for Zeus..."
     echo ""
-    dc_exec lnd lndconnect \
+    if ! dc_exec lnd lndconnect \
         --host="${onion}" \
         --port=8080 \
         --adminmacaroonpath=/data/.lnd/data/chain/bitcoin/mainnet/admin.macaroon \
         --tlscertpath=/data/.lnd/tls.cert \
-        --nocert
+        --nocert; then
+        print_fail "Failed to generate lndconnect URI"
+        return 1
+    fi
 
     echo ""
     print_info "In Zeus: ${BOLD}Add Node${NC} > ${BOLD}lndconnect REST${NC}"

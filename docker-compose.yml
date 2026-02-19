@@ -2,11 +2,10 @@
 # Static compose file - no more fragment generation
 
 networks:
+  tor_net:
+    driver: bridge
   awning_net:
     driver: bridge
-    ipam:
-      config:
-        - subnet: 172.28.0.0/16
 
 services:
   # --- Tor SOCKS proxy and hidden services ---
@@ -15,12 +14,12 @@ services:
       context: ./dockerfiles
       dockerfile: Dockerfile.tor
       args:
-        UID: ${UID}
-        GID: ${GID}
+        UID: ${HOST_UID}
+        GID: ${HOST_GID}
     container_name: tor
     restart: unless-stopped
     networks:
-      - awning_net
+      - tor_net
     volumes:
       - ./configs/torrc:/etc/tor/torrc:ro
       - ./data/tor:/var/lib/tor
@@ -33,18 +32,19 @@ services:
       args:
         BITCOIN_CORE_VERSION: ${BITCOIN_CORE_VERSION}
         BITCOIN_ARCH: ${BITCOIN_ARCH}
-        UID: ${UID}
-        GID: ${GID}
+        UID: ${HOST_UID}
+        GID: ${HOST_GID}
     container_name: bitcoin
     restart: unless-stopped
     networks:
+      - tor_net
       - awning_net
     depends_on:
       tor:
-        condition: service_healthy
+        condition: service_started
     volumes:
-      - ./configs/bitcoin.conf:/data/.bitcoin/bitcoin.conf:ro
       - ./data/bitcoin:/data/.bitcoin
+      - ./configs/bitcoin.conf:/data/.bitcoin/bitcoin.conf:ro
     command: -datadir=/data/.bitcoin
 
   # --- LND (Lightning Network Daemon) ---
@@ -55,24 +55,25 @@ services:
       args:
         LND_VERSION: ${LND_VERSION}
         LND_ARCH: ${LND_ARCH}
-        UID: ${UID}
-        GID: ${GID}
+        UID: ${HOST_UID}
+        GID: ${HOST_GID}
     container_name: lnd
     restart: unless-stopped
     networks:
+      - tor_net
       - awning_net
     depends_on:
       bitcoin:
         condition: service_healthy
       tor:
-        condition: service_healthy
+        condition: service_started
     ports:
-      - "8080:8080"   # REST API (TLS)
+      - "${LND_REST_BIND:-127.0.0.1}:${LND_REST_PORT:-8080}:8080"   # REST API (TLS)
     environment:
       NODE_ALIAS: ${NODE_ALIAS}
     volumes:
-      - ./configs/lnd.conf:/data/.lnd/lnd.conf:ro
       - ./data/lnd:/data/.lnd
+      - ./configs/lnd.conf:/data/.lnd/lnd.conf:ro
 
   # --- Electrs (Electrum Rust Server) ---
   electrs:
@@ -81,11 +82,12 @@ services:
       dockerfile: Dockerfile.electrs
       args:
         ELECTRS_VERSION: ${ELECTRS_VERSION}
-        UID: ${UID}
-        GID: ${GID}
+        UID: ${HOST_UID}
+        GID: ${HOST_GID}
     container_name: electrs
     restart: unless-stopped
     networks:
+      - tor_net
       - awning_net
     depends_on:
       bitcoin:
@@ -113,7 +115,7 @@ services:
       electrs:
         condition: service_started
     ports:
-      - "50002:50002"  # Electrs SSL
+      - "${ELECTRS_SSL_BIND:-127.0.0.1}:${ELECTRS_SSL_PORT:-50002}:50002"  # Electrs SSL
 
   # --- Static Channel Backup ---
   scb:
@@ -121,15 +123,15 @@ services:
       context: ./dockerfiles
       dockerfile: Dockerfile.scb
       args:
-        UID: ${UID}
-        GID: ${GID}
+        UID: ${HOST_UID}
+        GID: ${HOST_GID}
     container_name: scb
     restart: unless-stopped
     networks:
       - awning_net
     depends_on:
       lnd:
-        condition: service_healthy
+        condition: service_started
     environment:
       SCB_REPO: ${SCB_REPO}
     volumes:

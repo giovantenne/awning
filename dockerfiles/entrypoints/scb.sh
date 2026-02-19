@@ -18,15 +18,21 @@ if [ ! -f /data/.ssh/id_ed25519 ]; then
     ssh-keygen -t ed25519 -f /data/.ssh/id_ed25519 -N "" -q
 fi
 
-# GitHub host keys (avoids interactive prompt)
-if [ ! -f /data/.ssh/known_hosts ]; then
-    mkdir -p /data/.ssh
-    cat > /data/.ssh/known_hosts <<'KEYS'
-github.com ssh-ed25519 <REDACTED>
-github.com ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBEmKSENjQEezOmxkZMy7opKgwFB9nkt5YRrYMjNuG5N87uRgg6CLrbo5wAdT/y6v0mKV0U2w0WZ2YB/++Tpockg=
-github.com ssh-rsa <REDACTED>
-KEYS
+# known_hosts bootstrap (avoids interactive prompt)
+mkdir -p /data/.ssh
+touch /data/.ssh/known_hosts
+if ! ssh-keygen -F github.com -f /data/.ssh/known_hosts >/dev/null 2>&1; then
+    log "Fetching github.com host keys..."
+    delay=2
+    while ! ssh-keyscan -t ed25519,ecdsa,rsa github.com >> /data/.ssh/known_hosts 2>/dev/null; do
+        log "ssh-keyscan failed, retrying in ${delay}s..."
+        sleep "${delay}"
+        delay=$(( delay * 2 > MAX_RETRY_DELAY ? MAX_RETRY_DELAY : delay * 2 ))
+    done
 fi
+
+# Configure SSH for git operations
+export GIT_SSH_COMMAND="ssh -i /data/.ssh/id_ed25519 -o UserKnownHostsFile=/data/.ssh/known_hosts -o StrictHostKeyChecking=yes"
 
 log "--- SSH Public Key (add this to your GitHub repo as a deploy key with write access) ---"
 cat /data/.ssh/id_ed25519.pub
@@ -39,8 +45,8 @@ git config --global user.name "Awning SCB"
 # --- Clone or update repo ---
 setup_repo() {
     if [ -z "${SCB_REPO:-}" ]; then
-        log "ERROR: SCB_REPO environment variable not set"
-        exit 1
+        log "SCB_REPO not set, channel backup disabled. Exiting."
+        exit 0
     fi
 
     if [ ! -d "${BACKUP_DIR}/.git" ]; then
@@ -54,8 +60,16 @@ setup_repo() {
     else
         log "Updating existing backup repository..."
         cd "${BACKUP_DIR}"
-        git fetch origin 2>&1 || true
-        git reset --hard origin/main 2>&1 || true
+        git fetch origin --prune 2>&1 || true
+
+        # Handle both initialized and empty remotes without noisy fatal errors.
+        if git show-ref --verify --quiet refs/remotes/origin/main; then
+            git reset --hard origin/main 2>&1 || true
+        elif git show-ref --verify --quiet refs/remotes/origin/master; then
+            git reset --hard origin/master 2>&1 || true
+        else
+            log "Remote repository is empty or has no default branch yet."
+        fi
     fi
 }
 
@@ -74,7 +88,7 @@ push_backup() {
 
     git commit -m "SCB $(date +"%Y-%m-%d %H:%M:%S")"
 
-    while ! git push origin main 2>&1; do
+    while ! git push origin HEAD 2>&1; do
         log "Push failed, retrying in ${delay}s..."
         sleep "${delay}"
         delay=$(( delay * 2 > MAX_RETRY_DELAY ? MAX_RETRY_DELAY : delay * 2 ))

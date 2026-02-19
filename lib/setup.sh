@@ -1,26 +1,34 @@
 #!/bin/bash
 # Awning v2: Setup wizard
 # Guided setup with polished terminal UI
+# Only requirement: Docker (with compose plugin)
 
 run_setup() {
+    local ignore_disk_space="${1:-0}"
     draw_header "AWNING SETUP" "Bitcoin + Lightning Node"
 
-    step_prerequisites
+    step_prerequisites "$ignore_disk_space"
     step_node_config
     step_scb_config
     step_generate_configs
-    step_build_and_start
+    if ! step_build_and_start; then
+        return 1
+    fi
+    if ! step_initialize_wallet; then
+        return 1
+    fi
 
     echo ""
-    echo -e "  ${ICON_BOLT} ${BOLD}Your node is starting!${NC} Bitcoin sync will take several days."
+    echo -e "  ${ICON_BOLT} ${BOLD}Setup complete!${NC} Bitcoin sync will take several days."
     echo -e "  Run ${CYAN}./awning.sh${NC} again to access the management menu."
     echo ""
 }
 
 # ============================================================
-# Pre-step: Prerequisites
+# Pre-step: Prerequisites (only Docker required on host)
 # ============================================================
 step_prerequisites() {
+    local ignore_disk_space="${1:-0}"
     echo ""
     echo -e "  ${BOLD}Checking prerequisites...${NC}"
 
@@ -33,6 +41,7 @@ step_prerequisites() {
         print_check "Docker v${docker_ver}"
     else
         print_fail "Docker not found"
+        print_info "Install: https://docs.docker.com/engine/install/"
         missing=1
     fi
 
@@ -48,33 +57,9 @@ step_prerequisites() {
 
     # Docker daemon running
     if docker info &>/dev/null 2>&1 || sudo docker info &>/dev/null 2>&1; then
-        : # daemon is running, already shown via docker version
+        print_check "Docker daemon running"
     else
         print_fail "Docker daemon is not running"
-        missing=1
-    fi
-
-    # Git
-    if command -v git &>/dev/null; then
-        print_check "git"
-    else
-        print_fail "git not found"
-        missing=1
-    fi
-
-    # OpenSSL
-    if command -v openssl &>/dev/null; then
-        print_check "openssl"
-    else
-        print_fail "openssl not found"
-        missing=1
-    fi
-
-    # Python3 (needed for Tor hash)
-    if command -v python3 &>/dev/null; then
-        print_check "python3"
-    else
-        print_fail "python3 not found (required for Tor password hashing)"
         missing=1
     fi
 
@@ -88,14 +73,17 @@ step_prerequisites() {
         print_check "Disk space: ${avail_gb} GB available (900 GB required)"
     elif [[ "$avail_gb_int" -ge 600 ]]; then
         print_warn "Disk space: ${avail_gb} GB available (900 GB recommended)"
+    elif [[ "$ignore_disk_space" == "1" ]]; then
+        print_warn "Disk space: ${avail_gb} GB available (below minimum, override enabled)"
     else
         print_fail "Disk space: ${avail_gb} GB available (900 GB required)"
         missing=1
     fi
 
     # Internet connectivity
-    if curl -sf --max-time 5 https://api.github.com &>/dev/null || \
-       wget -q --timeout=5 -O /dev/null https://api.github.com 2>/dev/null; then
+    if curl -sf --max-time 5 https://api.github.com &>/dev/null 2>&1 || \
+       wget -q --timeout=5 -O /dev/null https://api.github.com 2>/dev/null || \
+       _docker run --rm debian:bookworm-slim bash -c "apt-get update -qq" &>/dev/null 2>&1; then
         print_check "Internet connectivity"
     else
         print_warn "Internet connectivity check failed (may still work)"
@@ -113,10 +101,170 @@ step_prerequisites() {
 # ============================================================
 # Step 1: Node configuration
 # ============================================================
-step_node_config() {
-    print_step "Step 1/5: Node Configuration"
+choose_version_from_list() {
+    local label="$1"
+    local default="$2"
+    shift 2
+    local options=("$@")
 
-    # Detect architecture
+    local i=1
+    for opt in "${options[@]}"; do
+        echo "    ${i}) ${opt}" >&2
+        ((i++))
+    done
+    echo "    ${i}) Custom" >&2
+
+    while true; do
+        local choice
+        read -r -p "  Choose [default ${default}]: " choice < /dev/tty
+
+        if [[ -z "$choice" ]]; then
+            echo "$default"
+            return
+        fi
+
+        if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#options[@]} + 1 )); then
+            if (( choice == ${#options[@]} + 1 )); then
+                local custom
+                read -r -p "  Enter ${label} version [${default}]: " custom < /dev/tty
+                echo "${custom:-$default}"
+                return
+            fi
+            echo "${options[$((choice - 1))]}"
+            return
+        fi
+
+        print_warn "Invalid selection" >&2
+    done
+}
+
+validate_node_alias() {
+    local alias="$1"
+    if [[ ! "$alias" =~ ^[A-Za-z0-9._-]{1,32}$ ]]; then
+        print_fail "Invalid alias. Allowed chars: A-Z a-z 0-9 . _ - (max 32)"
+        return 1
+    fi
+    return 0
+}
+
+validate_scb_repo() {
+    local repo="$1"
+    if [[ ! "$repo" =~ ^git@[A-Za-z0-9.-]+:[A-Za-z0-9._-]+/[A-Za-z0-9._-]+\.git$ ]]; then
+        print_fail "Invalid Git SSH URL format"
+        print_info "Expected: git@github.com:user/lnd-backup.git"
+        return 1
+    fi
+    return 0
+}
+
+fetch_github_versions() {
+    local repo="$1"
+    local limit="${2:-5}"
+    local output=""
+
+    output="$(_docker run --rm -i python:3-slim python3 - "$repo" "$limit" <<'PY'
+import json, sys, urllib.request
+repo = sys.argv[1]
+limit = int(sys.argv[2])
+url = f"https://api.github.com/repos/{repo}/releases?per_page={limit}"
+req = urllib.request.Request(url, headers={"User-Agent": "awning-setup"})
+with urllib.request.urlopen(req, timeout=10) as r:
+    data = json.load(r)
+versions = []
+for rel in data:
+    tag = rel.get("tag_name", "")
+    if tag.startswith("v"):
+        tag = tag[1:]
+    if tag and tag not in versions:
+        versions.append(tag)
+for v in versions:
+    print(v)
+PY
+)" || true
+
+    if [[ -z "$output" ]]; then
+        return 1
+    fi
+
+    echo "$output"
+}
+
+fetch_latest_github_version() {
+    local repo="$1"
+    local output=""
+
+    output="$(_docker run --rm -i python:3-slim python3 - "$repo" <<'PY'
+import json, sys, urllib.request
+repo = sys.argv[1]
+url = f"https://api.github.com/repos/{repo}/releases/latest"
+req = urllib.request.Request(url, headers={"User-Agent": "awning-setup"})
+with urllib.request.urlopen(req, timeout=10) as r:
+    data = json.load(r)
+tag = data.get("tag_name", "")
+if tag.startswith("v"):
+    tag = tag[1:]
+print(tag)
+PY
+)" || true
+
+    [[ -n "$output" ]] || return 1
+    echo "$output"
+}
+
+select_version_interactive() {
+    local label="$1"
+    local repo="$2"
+    local fallback_latest="$3"
+
+    local latest
+    latest="$(fetch_latest_github_version "$repo" 2>/dev/null)" || latest="$fallback_latest"
+
+    echo "" >&2
+    echo -e "  ${BOLD}${label} version${NC}" >&2
+    echo -e "    1) Latest (${latest})" >&2
+    echo "    2) Custom version" >&2
+    echo "    3) Show recent releases" >&2
+
+    while true; do
+        local choice
+        read -r -p "  Choose [default 1]: " choice < /dev/tty
+        choice="${choice:-1}"
+
+        case "$choice" in
+            1)
+                echo "$latest"
+                return
+                ;;
+            2)
+                local custom
+                read -r -p "  Enter ${label} version [${latest}]: " custom < /dev/tty
+                echo "${custom:-$latest}"
+                return
+                ;;
+            3)
+                local versions
+                versions="$(fetch_github_versions "$repo" 8 2>/dev/null)" || true
+                if [[ -z "$versions" ]]; then
+                    print_warn "Could not fetch recent ${label} releases, using latest (${latest})" >&2
+                    echo "$latest"
+                    return
+                fi
+                local version_list
+                readarray -t version_list <<< "$versions"
+                choose_version_from_list "$label" "$latest" "${version_list[@]}"
+                return
+                ;;
+            *)
+                print_warn "Invalid selection" >&2
+                ;;
+        esac
+    done
+}
+
+step_node_config() {
+    print_step "Step 1/6: Node Configuration"
+
+    # Auto-detect architecture
     local arch
     arch="$(uname -m)"
     local bitcoin_arch lnd_arch
@@ -128,57 +276,57 @@ step_node_config() {
             exit 1
             ;;
     esac
-    print_info "Architecture: ${arch}"
+    print_info "Architecture: ${arch} (auto-detected)"
+
+    # Auto-detect UID/GID
+    local host_uid host_gid
+    host_uid="$(id -u)"
+    host_gid="$(id -g)"
+    print_info "UID/GID: ${host_uid}/${host_gid} (auto-detected)"
 
     # Node alias
     local node_alias
-    node_alias="$(read_input "Enter LND alias" "AwningNode")"
-
-    # Versions
-    local btc_version lnd_version electrs_version
-    btc_version="$(read_input "Bitcoin Core version" "29.1")"
-    lnd_version="$(read_input "LND version" "0.19.3-beta")"
-    electrs_version="$(read_input "Electrs version" "0.10.10")"
-
-    # LND wallet password
-    echo ""
-    print_info "Set your LND wallet password (min 8 characters)"
-    print_info "This password unlocks your Lightning wallet on startup"
-    local lnd_password lnd_password_confirm
     while true; do
-        lnd_password="$(read_password "LND wallet password")"
-        if ! validate_password "$lnd_password" 8; then
-            continue
+        node_alias="$(read_input "Enter LND alias" "AwningNode")"
+        if validate_node_alias "$node_alias"; then
+            break
         fi
-        lnd_password_confirm="$(read_password "Confirm password")"
-        if [[ "$lnd_password" != "$lnd_password_confirm" ]]; then
-            print_fail "Passwords do not match"
-            continue
-        fi
-        break
     done
-    print_check "Password set"
 
-    # Save to .env
+    # Versions (default to latest; fetch full release list only on explicit request)
+    local btc_version lnd_version electrs_version
+    btc_version="$(select_version_interactive "Bitcoin Core" "bitcoin/bitcoin" "29.1")"
+    lnd_version="$(select_version_interactive "LND" "lightningnetwork/lnd" "0.19.3-beta")"
+    electrs_version="$(select_version_interactive "Electrs" "romanz/electrs" "0.10.10")"
+
+    # Save to .env (UID/GID/ARCH auto-detected, not user-editable)
     local env_file
     env_file="$(awning_path .env)"
 
+    umask 077
     cat > "$env_file" <<EOF
 # Awning v2 - Generated by setup wizard on $(date)
-UID=$(id -u)
-GID=$(id -g)
+# System (auto-detected, do not edit)
+HOST_UID=${host_uid}
+HOST_GID=${host_gid}
 BITCOIN_ARCH=${bitcoin_arch}
 LND_ARCH=${lnd_arch}
+
+# Versions
 BITCOIN_CORE_VERSION=${btc_version}
 LND_VERSION=${lnd_version}
 ELECTRS_VERSION=${electrs_version}
-NODE_ALIAS=${node_alias}
-LND_PASSWORD=${lnd_password}
-EOF
 
-    # Store LND password for wallet auto-unlock
-    mkdir -p "$(awning_path data/lnd)"
-    echo "$lnd_password" > "$(awning_path data/lnd/password.txt)"
+# Node
+NODE_ALIAS=${node_alias}
+
+# Host port bindings (security defaults: localhost only)
+LND_REST_BIND=127.0.0.1
+LND_REST_PORT=8080
+ELECTRS_SSL_BIND=127.0.0.1
+ELECTRS_SSL_PORT=50002
+EOF
+    chmod 600 "$env_file"
 
     echo ""
     print_check "Node configuration saved"
@@ -188,7 +336,7 @@ EOF
 # Step 2: SCB configuration
 # ============================================================
 step_scb_config() {
-    print_step "Step 2/5: Channel Backup (SCB)"
+    print_step "Step 2/6: Channel Backup (SCB)"
     echo ""
     print_info "SCB automatically backs up your Lightning channel state to GitHub."
     print_info "You need a private GitHub repository and an SSH deploy key."
@@ -196,79 +344,112 @@ step_scb_config() {
 
     if confirm "Enable Static Channel Backup?" "y"; then
         local scb_repo
-        scb_repo="$(read_input "GitHub SSH URL (e.g. git@github.com:user/lnd-backup.git)" "")"
-
-        if [[ -z "$scb_repo" ]]; then
-            print_warn "No repository provided, SCB will be disabled"
-            echo "SCB_REPO=" >> "$(awning_path .env)"
-            return
-        fi
+        print_info "Need a private GitHub repo? Create one at: ${CYAN}https://github.com/new${NC}"
+        while true; do
+            scb_repo="$(read_input "GitHub SSH URL (e.g. git@github.com:user/lnd-backup.git)" "")"
+            if [[ -z "$scb_repo" ]]; then
+                print_warn "No repository provided, SCB will be disabled"
+                echo "SCB_REPO=" >> "$(awning_path .env)"
+                export SCB_REPO=""
+                return
+            fi
+            if validate_scb_repo "$scb_repo"; then
+                break
+            fi
+            print_info "Please enter a valid SSH URL or leave blank to disable SCB."
+        done
 
         echo "SCB_REPO=${scb_repo}" >> "$(awning_path .env)"
+        export SCB_REPO="${scb_repo}"
 
-        # Generate SSH key immediately
+        # Generate SSH key using Docker (no ssh-keygen needed on host)
         local scb_ssh_dir
         scb_ssh_dir="$(awning_path data/scb/.ssh)"
         mkdir -p "$scb_ssh_dir"
 
         if [[ ! -f "${scb_ssh_dir}/id_ed25519" ]]; then
-            ssh-keygen -t ed25519 -f "${scb_ssh_dir}/id_ed25519" -N "" -C "scb@awning" &>/dev/null
+            if command -v ssh-keygen &>/dev/null; then
+                ssh-keygen -t ed25519 -f "${scb_ssh_dir}/id_ed25519" -N "" -C "scb@awning" &>/dev/null
+            else
+                # Generate via Docker if ssh-keygen not available on host
+                _docker run --rm -v "${scb_ssh_dir}:/keys" debian:bookworm-slim \
+                    bash -c "apt-get update -qq && apt-get install -y -qq openssh-client >/dev/null 2>&1 && ssh-keygen -t ed25519 -f /keys/id_ed25519 -N '' -C 'scb@awning' && chown $(id -u):$(id -g) /keys/id_ed25519 /keys/id_ed25519.pub" &>/dev/null
+            fi
             print_check "SSH key generated"
         else
             print_info "SSH key already exists"
         fi
 
         # Display the public key in a box
-        local pubkey
-        pubkey="$(cat "${scb_ssh_dir}/id_ed25519.pub")"
-        draw_content_box "Deploy Key" "$pubkey"
+        if [[ -f "${scb_ssh_dir}/id_ed25519.pub" ]]; then
+            local pubkey
+            pubkey="$(cat "${scb_ssh_dir}/id_ed25519.pub")"
+            local key_title
+            key_title="${NODE_ALIAS:-AwningNode} SCB"
+            echo ""
+            if [[ "$scb_repo" =~ ^git@github\.com:([^/]+)/([^/]+)\.git$ ]]; then
+                local gh_owner gh_repo
+                gh_owner="${BASH_REMATCH[1]}"
+                gh_repo="${BASH_REMATCH[2]}"
+                echo -e "  ${BOLD}Add this key at:${NC} ${CYAN}https://github.com/${gh_owner}/${gh_repo}/settings/keys/new${NC}"
+            else
+                echo -e "  ${BOLD}Add this key in your repository Deploy Keys settings.${NC}"
+            fi
+            echo -e "  ${BOLD}Title:${NC} ${YELLOW}${key_title}${NC}"
+            echo -e "  ${BOLD}Key:${NC}   ${YELLOW}${pubkey}${NC}"
+            echo -e "  ${BOLD}(Enable Allow write access)${NC}"
+            echo ""
 
-        echo ""
-        print_info "Add this key at: ${CYAN}${scb_repo%%.git}/settings/keys/new${NC}"
-        print_info "(Enable ${BOLD}Allow write access${NC})"
-        echo ""
+            # Test write access (dry-run push) if git+ssh are available
+            if command -v ssh &>/dev/null && command -v git &>/dev/null; then
+                while true; do
+                    read -r -p "$(echo -e "  Press ${BOLD}Enter${NC} to test SSH access...")" _
 
-        # Interactive test
-        read -r -p "$(echo -e "  Press ${BOLD}Enter${NC} to test SSH access...")" _
+                    printf '  Testing...'
 
-        printf '  Testing...'
+                    local git_host
+                    git_host="$(echo "$scb_repo" | sed -n 's/.*@\([^:]*\):.*/\1/p')"
+                    if [[ -z "$git_host" ]]; then
+                        print_warn "Could not parse git host from repository URL"
+                        return
+                    fi
 
-        # Extract host from git URL (e.g., git@github.com:user/repo.git -> github.com)
-        local git_host
-        git_host="$(echo "$scb_repo" | sed -n 's/.*@\([^:]*\):.*/\1/p')"
+                    if command -v ssh-keyscan &>/dev/null; then
+                        ssh-keyscan -t ed25519 "$git_host" >> "${scb_ssh_dir}/known_hosts" 2>/dev/null || true
+                    fi
 
-        # Add host to known_hosts if not already there
-        ssh-keyscan -t ed25519 "$git_host" >> "${scb_ssh_dir}/known_hosts" 2>/dev/null || true
+                    local test_dir branch_name push_test
+                    test_dir="$(mktemp -d)"
+                    branch_name="awning-write-check-$(date +%s)"
+                    git -C "$test_dir" init -q
+                    git -C "$test_dir" remote add origin "$scb_repo"
+                    echo "write-check $(date)" > "${test_dir}/.scb-write-check"
+                    git -C "$test_dir" add .scb-write-check
+                    git -C "$test_dir" -c user.email="awning@backup" -c user.name="Awning SCB" commit -q -m "SCB write check"
+                    push_test="$(GIT_SSH_COMMAND="ssh -i ${scb_ssh_dir}/id_ed25519 -o UserKnownHostsFile=${scb_ssh_dir}/known_hosts -o StrictHostKeyChecking=yes" \
+                        git -C "$test_dir" push --dry-run origin HEAD:refs/heads/${branch_name} 2>&1)" || true
+                    rm -rf "$test_dir"
 
-        # Test SSH access
-        local ssh_test
-        ssh_test="$(ssh -i "${scb_ssh_dir}/id_ed25519" \
-            -o UserKnownHostsFile="${scb_ssh_dir}/known_hosts" \
-            -o StrictHostKeyChecking=no \
-            -T "git@${git_host}" 2>&1)" || true
+                    if echo "$push_test" | grep -qiE "Everything up-to-date|new branch|\\[new branch\\]|To "; then
+                        printf '\r\033[K'
+                        print_check "Repository write access OK (dry-run push)"
+                        break
+                    fi
 
-        if echo "$ssh_test" | grep -qi "successfully authenticated\|Hi \|welcome"; then
-            printf '\r\033[K'
-            print_check "SSH authentication OK"
-        else
-            printf '\r\033[K'
-            print_warn "SSH test inconclusive (key may not be added yet)"
-            print_info "You can add the deploy key later; SCB will retry on startup"
-        fi
-
-        # Test git clone
-        local test_dir
-        test_dir="$(mktemp -d)"
-        if GIT_SSH_COMMAND="ssh -i ${scb_ssh_dir}/id_ed25519 -o UserKnownHostsFile=${scb_ssh_dir}/known_hosts -o StrictHostKeyChecking=no" \
-           git clone "$scb_repo" "$test_dir/test" &>/dev/null 2>&1; then
-            print_check "Repository access OK"
-            rm -rf "$test_dir"
-        else
-            print_warn "Repository clone failed (deploy key may not be configured yet)"
-            rm -rf "$test_dir"
+                    printf '\r\033[K'
+                    print_warn "Write access test failed"
+                    if echo "$push_test" | grep -qi "Permission denied"; then
+                        print_info "Deploy key likely missing or without write access."
+                    fi
+                    print_info "After fixing the deploy key, press Enter to test again."
+                done
+            else
+                print_info "git/ssh client not on host; SCB container will test connectivity on startup"
+            fi
         fi
     else
         echo "SCB_REPO=" >> "$(awning_path .env)"
+        export SCB_REPO=""
         print_info "SCB disabled"
     fi
 }
@@ -277,7 +458,7 @@ step_scb_config() {
 # Step 3: Generate configs from templates
 # ============================================================
 step_generate_configs() {
-    print_step "Step 3/5: Generating Configuration"
+    print_step "Step 3/6: Generating Configuration"
 
     # Generate random credentials
     local rpc_user rpc_password tor_password
@@ -289,17 +470,19 @@ step_generate_configs() {
     local env_file
     env_file="$(awning_path .env)"
     cat >> "$env_file" <<EOF
+
+# Credentials (auto-generated, do not edit)
 BITCOIN_RPC_USER=${rpc_user}
 BITCOIN_RPC_PASSWORD=${rpc_password}
 TOR_CONTROL_PASSWORD=${tor_password}
 EOF
 
-    # Generate Bitcoin rpcauth line
+    # Generate Bitcoin rpcauth line (via Docker if openssl not on host)
     local rpcauth_line
     rpcauth_line="$(generate_rpcauth "$rpc_user" "$rpc_password")"
     print_check "Bitcoin RPC credentials"
 
-    # Generate Tor hashed password
+    # Generate Tor hashed password (via Docker if python3 not on host)
     local tor_hashed
     tor_hashed="$(generate_tor_hash "$tor_password")"
     print_check "Tor control password"
@@ -341,27 +524,46 @@ EOF
 }
 
 # Generate rpcauth line compatible with Bitcoin Core
+# Uses openssl on host if available, otherwise runs via Docker with Python
 generate_rpcauth() {
     local user="$1"
     local password="$2"
 
-    local salt
-    salt="$(openssl rand -hex 16)"
+    local salt hmac
 
-    local hmac
-    hmac="$(echo -n "${password}" | openssl dgst -sha256 -hmac "${salt}" -binary | xxd -p -c 256)"
+    if command -v openssl &>/dev/null; then
+        salt="$(openssl rand -hex 16)"
+        hmac="$(echo -n "${password}" | openssl dgst -sha256 -hmac "${salt}" -binary | od -A n -t x1 | tr -d ' \n')"
+    else
+        # Run via Docker using Python (no host Python dependency)
+        local result
+        result="$(_docker run --rm -i python:3-slim python3 - "$password" <<'PY'
+import hashlib, hmac as h, os, sys
+password = sys.argv[1].encode()
+salt = os.urandom(16).hex()
+mac = h.new(salt.encode(), password, hashlib.sha256).hexdigest()
+print(salt + ' ' + mac)
+PY
+)" || true
+        salt="$(echo "$result" | tail -1 | awk '{print $1}')"
+        hmac="$(echo "$result" | tail -1 | awk '{print $2}')"
+    fi
+
+    if [[ -z "$salt" || -z "$hmac" ]]; then
+        log_error "Failed to generate RPC auth credentials"
+        exit 1
+    fi
 
     echo "rpcauth=${user}:${salt}\$${hmac}"
 }
 
-# Generate Tor hashed control password
+# Generate Tor hashed control password via Docker
 generate_tor_hash() {
     local password="$1"
-
     local hash
-    hash="$(python3 -c "
-import hashlib, os, binascii
-password = b'${password}'
+    hash="$(_docker run --rm -i python:3-slim python3 - "$password" <<'PY'
+import hashlib, os, binascii, sys
+password = sys.argv[1].encode()
 indicator = 96
 count = (16 + (indicator & 15)) << ((indicator >> 4) + 6)
 salt = os.urandom(8)
@@ -372,10 +574,11 @@ while len(hash_input) < count:
 hash_input = hash_input[:count]
 h = hashlib.sha1(hash_input).digest()
 print('16:' + binascii.hexlify(salt).decode().upper() + '{:02X}'.format(indicator) + binascii.hexlify(h).decode().upper())
-" 2>/dev/null)"
+PY
+)" || true
 
     if [[ -z "$hash" ]]; then
-        log_error "Failed to generate Tor password hash (python3 required)"
+        log_error "Failed to generate Tor password hash"
         exit 1
     fi
 
@@ -386,7 +589,7 @@ print('16:' + binascii.hexlify(salt).decode().upper() + '{:02X}'.format(indicato
 # Step 4: Build Docker images
 # ============================================================
 step_build_and_start() {
-    print_step "Step 4/5: Building Docker Images"
+    print_step "Step 4/6: Building Docker Images"
     echo ""
     print_info "Building Electrs from source can take ${BOLD}up to 1 hour${NC} on ARM."
     echo ""
@@ -398,10 +601,110 @@ step_build_and_start() {
     fi
 
     echo ""
-    dc_build_services
+    if ! dc_build_services; then
+        print_warn "Build failed. Fix the error and re-run: ./awning.sh build"
+        return 1
+    fi
 
     # Step 5: Start services
-    print_step "Step 5/5: Starting Services"
+    print_step "Step 5/6: Starting Services"
     echo ""
+    ensure_lnd_password_file
     dc_start_services
+}
+
+# ============================================================
+# Step 6: Initialize LND wallet
+# ============================================================
+step_initialize_wallet() {
+    print_step "Step 6/6: Initialize LND Wallet"
+    echo ""
+
+    local macaroon
+    macaroon="$(awning_path data/lnd/data/chain/bitcoin/mainnet/admin.macaroon)"
+    if [[ -f "$macaroon" ]]; then
+        print_info "Wallet already initialized, skipping."
+        return 0
+    fi
+
+    if ! is_running lnd; then
+        print_warn "LND is not running. Attempting to start required services..."
+        dc_start_services lnd >/dev/null 2>&1 || true
+        sleep 2
+        if ! is_running lnd; then
+            print_warn "LND is still not running, wallet initialization skipped."
+            print_info "Check logs with: ${CYAN}./awning.sh logs lnd${NC}"
+            return 0
+        fi
+        print_check "LND started"
+    fi
+
+    local lnd_password
+    local password_file
+    password_file="$(awning_path data/lnd/password.txt)"
+    mkdir -p "$(awning_path data/lnd)"
+
+    echo ""
+    print_info "Enter the LND auto-unlock password (saved in password.txt)."
+    print_info "Use the same password you will enter in wallet creation."
+    while true; do
+        lnd_password="$(read_password "LND auto-unlock password")"
+        if validate_password "$lnd_password" 8; then
+            break
+        fi
+    done
+    umask 077
+    printf '%s\n' "$lnd_password" > "$password_file"
+    chmod 600 "$password_file"
+    print_check "Auto-unlock password saved"
+
+    print_info "LND will ask for wallet password twice."
+    print_info "Use the same password you just saved for auto-unlock."
+    print_warn "IMPORTANT: Write down the seed phrase displayed below!"
+    echo ""
+
+    if ! wait_for_lnd_stable; then
+        print_fail "LND is not stable yet (still restarting)."
+        print_info "Try again in a minute with: ${CYAN}./awning.sh setup${NC}"
+        return 1
+    fi
+
+    if dc_exec lnd lncli create; then
+        print_check "Wallet initialized"
+        return 0
+    fi
+
+    print_fail "Wallet initialization failed"
+    return 1
+}
+
+ensure_lnd_password_file() {
+    local password_file
+    password_file="$(awning_path data/lnd/password.txt)"
+    mkdir -p "$(awning_path data/lnd)"
+    if [[ ! -f "$password_file" ]]; then
+        # Empty file to satisfy lnd startup validation before wallet init.
+        umask 077
+        : > "$password_file"
+        chmod 600 "$password_file"
+    fi
+}
+
+wait_for_lnd_stable() {
+    local timeout_s=90
+    local elapsed=0
+    local status=""
+
+    while (( elapsed < timeout_s )); do
+        status="$(_dc ps --format '{{.Status}}' lnd 2>/dev/null)" || status=""
+        if [[ -n "$status" ]] && echo "$status" | grep -qi "up"; then
+            if ! echo "$status" | grep -qi "restarting"; then
+                return 0
+            fi
+        fi
+        sleep 2
+        elapsed=$((elapsed + 2))
+    done
+
+    return 1
 }

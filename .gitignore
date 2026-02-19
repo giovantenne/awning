@@ -7,6 +7,9 @@ configs/lnd.conf
 configs/electrs.toml
 configs/torrc
 
+# Build logs
+.build.log
+
 # Runtime data
 data/bitcoin/*
 !data/bitcoin/.gitkeep

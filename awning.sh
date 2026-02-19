@@ -2,7 +2,8 @@
 # Awning v2: Bitcoin + Lightning Node Manager
 # https://github.com/giovantenne/awning
 
-set -euo pipefail
+# Strict mode for non-interactive execution
+set -uo pipefail
 
 # Resolve project directory (where this script lives)
 AWNING_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -15,14 +16,56 @@ source "${AWNING_DIR}/lib/setup.sh"
 source "${AWNING_DIR}/lib/health.sh"
 source "${AWNING_DIR}/lib/menu.sh"
 
+# Load .env safely (do not execute shell expressions from config values)
+load_env_file() {
+    local env_file="${AWNING_DIR}/.env"
+    [[ -f "$env_file" ]] || return 0
+
+    local key value
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+        [[ "$line" =~ ^[[:space:]]*([A-Z0-9_]+)=(.*)$ ]] || continue
+
+        key="${BASH_REMATCH[1]}"
+        value="${BASH_REMATCH[2]}"
+        value="${value%%[[:space:]]#*}"
+        value="${value%\"}"
+        value="${value#\"}"
+
+        case "$key" in
+            HOST_UID|HOST_GID|BITCOIN_ARCH|LND_ARCH|BITCOIN_CORE_VERSION|LND_VERSION|ELECTRS_VERSION|NODE_ALIAS|BITCOIN_RPC_USER|BITCOIN_RPC_PASSWORD|TOR_CONTROL_PASSWORD|SCB_REPO|LND_REST_BIND|LND_REST_PORT|ELECTRS_SSL_BIND|ELECTRS_SSL_PORT)
+                export "$key=$value"
+                ;;
+        esac
+    done < "$env_file"
+}
+
+load_env_file
+
 # --- Main ---
 main() {
     local command="${1:-}"
+    local setup_ignore_disk_space=0
+    local env_file
+    env_file="$(awning_path .env)"
 
-    # If no .env exists, run setup wizard
-    if [[ -z "$command" && ! -f "$(awning_path .env)" ]]; then
+    # If no .env exists and no command given, run setup wizard
+    if [[ -z "$command" && ! -f "$env_file" ]]; then
         run_setup
         return
+    fi
+
+    # Block operational commands until setup has generated .env
+    if [[ ! -f "$env_file" ]]; then
+        case "$command" in
+            setup|help|-h|--help)
+                ;;
+            *)
+                print_fail "Node is not configured yet (.env not found)."
+                print_info "Run ${CYAN}./awning.sh setup${NC} first."
+                return 1
+                ;;
+        esac
     fi
 
     case "$command" in
@@ -33,7 +76,19 @@ main() {
 
         # Setup
         setup)
-            run_setup
+            case "${2:-}" in
+                "" )
+                    ;;
+                --ignore-disk-space|--force)
+                    setup_ignore_disk_space=1
+                    ;;
+                * )
+                    print_fail "Unknown setup option: ${2}"
+                    print_info "Use: ${CYAN}./awning.sh setup --ignore-disk-space${NC}"
+                    return 1
+                    ;;
+            esac
+            run_setup "$setup_ignore_disk_space"
             ;;
 
         # Service management
@@ -41,7 +96,7 @@ main() {
             dc_start_services
             ;;
         stop)
-            dc_down
+            dc_stop_services
             print_check "Services stopped"
             ;;
         restart)
@@ -52,7 +107,7 @@ main() {
             dc_build_services "${@:2}"
             ;;
         update)
-            dc_down
+            dc_down_with_spinner
             dc_build_services
             dc_start_services
             print_check "Update complete"
@@ -110,6 +165,7 @@ show_help() {
     echo -e "  ${BOLD}Commands:${NC}"
     echo -e "    ${CYAN}(none)${NC}          Interactive menu (or setup on first run)"
     echo -e "    ${CYAN}setup${NC}           Run the setup wizard"
+    echo -e "    ${CYAN}setup --ignore-disk-space${NC}  Run setup ignoring low disk space"
     echo ""
     echo -e "  ${BOLD}Services:${NC}"
     echo -e "    ${CYAN}start${NC}           Start all services"

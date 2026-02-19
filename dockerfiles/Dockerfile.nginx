@@ -3,7 +3,7 @@
 
 FROM nginx:stable-alpine
 
-RUN apk add --no-cache openssl
+RUN apk add --no-cache openssl netcat-openbsd
 
 # Generate self-signed certificate for SSL termination
 RUN openssl req -x509 -nodes -newkey rsa:4096 \

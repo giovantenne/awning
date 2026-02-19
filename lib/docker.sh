@@ -2,99 +2,152 @@
 # Awning v2: Docker compose wrappers
 # Auto-detects sudo requirement and provides consistent interface
 
-# All 6 services in dependency order
-ALL_SERVICES=(tor bitcoin lnd electrs scb nginx)
+# Core services in dependency order (always started)
+CORE_SERVICES=(tor bitcoin lnd electrs nginx)
 
-# Detect if sudo is needed for docker
-_docker_cmd() {
-    if docker info &>/dev/null 2>&1; then
-        echo "docker"
+# All services including optional ones
+# SCB is only included when SCB_REPO is configured
+active_services() {
+    local services=("${CORE_SERVICES[@]}")
+    if [[ -n "${SCB_REPO:-}" ]]; then
+        services+=(scb)
+    fi
+    echo "${services[@]}"
+}
+
+# Detect if sudo is needed for docker (cached)
+_DOCKER_NEEDS_SUDO=""
+_needs_sudo() {
+    if [[ -z "$_DOCKER_NEEDS_SUDO" ]]; then
+        if docker info &>/dev/null; then
+            _DOCKER_NEEDS_SUDO="no"
+        else
+            _DOCKER_NEEDS_SUDO="yes"
+        fi
+    fi
+    [[ "$_DOCKER_NEEDS_SUDO" == "yes" ]]
+}
+
+# Run docker compose with correct prefix
+_dc() {
+    local compose_file
+    compose_file="$(awning_path docker-compose.yml)"
+    if _needs_sudo; then
+        sudo docker compose -f "$compose_file" "$@"
     else
-        echo "sudo docker"
+        docker compose -f "$compose_file" "$@"
     fi
 }
 
-# Get the docker compose command
-_compose_cmd() {
-    local docker
-    docker="$(_docker_cmd)"
-    echo "${docker} compose -f $(awning_path docker-compose.yml)"
+# Run raw docker with correct prefix
+_docker() {
+    if _needs_sudo; then
+        sudo docker "$@"
+    else
+        docker "$@"
+    fi
 }
 
 # --- Compose wrappers ---
 
 dc_build() {
-    local services=("$@")
-    eval "$(_compose_cmd) build ${services[*]:-}"
+    _dc build "$@"
 }
 
 dc_up() {
-    local services=("$@")
-    eval "$(_compose_cmd) up -d ${services[*]:-}"
+    _dc up -d "$@"
 }
 
 dc_down() {
-    eval "$(_compose_cmd) down"
+    _dc down
+}
+
+dc_down_with_spinner() {
+    _dc down >/dev/null 2>&1 &
+    local down_pid=$!
+    if ! spinner "$down_pid" "Stopping and removing existing containers..."; then
+        print_fail "Failed to stop/remove existing containers"
+        return 1
+    fi
 }
 
 dc_stop() {
-    local services=("$@")
-    eval "$(_compose_cmd) stop ${services[*]:-}"
+    _dc stop "$@"
 }
 
 dc_restart() {
-    local services=("$@")
-    eval "$(_compose_cmd) restart ${services[*]:-}"
+    _dc restart "$@"
 }
 
 dc_logs() {
-    local args=("$@")
-    eval "$(_compose_cmd) logs ${args[*]:-}"
+    _dc logs "$@"
 }
 
 dc_exec() {
-    local service="$1"
-    shift
-    eval "$(_compose_cmd) exec ${service} $*"
+    _dc exec "$@"
+}
+
+dc_exec_t() {
+    _dc exec -T "$@"
 }
 
 dc_ps() {
-    eval "$(_compose_cmd) ps --format 'table {{.Name}}\t{{.Status}}\t{{.Ports}}'"
+    _dc ps --format 'table {{.Name}}\t{{.Status}}\t{{.Ports}}'
 }
 
 # --- Service-by-service build with progress ---
-# Shows "Building tor... (1/6)" with live status
+# Build output goes to a log file; on failure, show the tail
 dc_build_services() {
-    local services=("${@:-${ALL_SERVICES[@]}}")
+    local services=("$@")
+    if [[ ${#services[@]} -eq 0 ]]; then
+        read -ra services <<< "$(active_services)"
+    fi
     local total=${#services[@]}
     local i=0
+    local build_log
+    build_log="$(awning_path .build.log)"
 
     for service in "${services[@]}"; do
         ((i++))
-        printf "\r\033[K"
-        printf '  %b Building %s... (%d/%d)' "${ICON_ARROW}" "$service" "$i" "$total"
-
-        if eval "$(_compose_cmd) build ${service}" &>/dev/null 2>&1; then
-            printf "\r\033[K"
+        _dc build "$service" > "$build_log" 2>&1 &
+        local build_pid=$!
+        if spinner "$build_pid" "Building ${service}... (${i}/${total})"; then
             print_check "${service} built"
         else
-            printf "\r\033[K"
             print_fail "${service} build failed"
-            log_error "Run './awning.sh logs' or rebuild with './awning.sh build ${service}' for details"
+            echo ""
+            echo -e "  ${DIM}--- Last 30 lines of build output ---${NC}"
+            tail -30 "$build_log" | while IFS= read -r line; do
+                echo "  $line"
+            done
+            echo -e "  ${DIM}--- Full log: .build.log ---${NC}"
+            echo ""
             return 1
         fi
     done
+    rm -f "$build_log"
 }
 
 # --- Service-by-service startup with status ---
-# Shows each service starting and reports when healthy
 dc_start_services() {
-    local services=("${@:-${ALL_SERVICES[@]}}")
+    local services=("$@")
+    if [[ ${#services[@]} -eq 0 ]]; then
+        read -ra services <<< "$(active_services)"
+    fi
 
     print_step "Starting services..."
     echo ""
 
-    dc_up "${services[@]}" 2>/dev/null
+    local total=${#services[@]}
+    local i=0
+    for service in "${services[@]}"; do
+        ((i++))
+        _dc up -d "$service" >/dev/null 2>&1 &
+        local up_pid=$!
+        if ! spinner "$up_pid" "Starting ${service}... (${i}/${total})"; then
+            print_fail "${service} failed to start"
+        fi
+    done
 
     # Give containers a moment to start
     sleep 2
@@ -102,7 +155,7 @@ dc_start_services() {
     # Report status of each service
     for service in "${services[@]}"; do
         local status
-        status="$(eval "$(_compose_cmd) ps --format '{{.Status}}' ${service} 2>/dev/null")" || status=""
+        status="$(_dc ps --format '{{.Status}}' "$service" 2>/dev/null)" || status=""
 
         if [[ -z "$status" ]]; then
             print_fail "${service} (not found)"
@@ -110,7 +163,6 @@ dc_start_services() {
             local annotation=""
             case "$service" in
                 bitcoin)
-                    # Check if syncing
                     local progress
                     progress="$(bitcoin_cli getblockchaininfo 2>/dev/null | jq -r '.verificationprogress // empty' 2>/dev/null)" || true
                     if [[ -n "$progress" ]]; then
@@ -139,6 +191,37 @@ dc_start_services() {
     done
 }
 
+# --- Service-by-service stop with progress ---
+dc_stop_services() {
+    local services=("$@")
+    if [[ ${#services[@]} -eq 0 ]]; then
+        read -ra services <<< "$(active_services)"
+    fi
+
+    print_step "Stopping services..."
+    echo ""
+
+    local total=${#services[@]}
+    local i=0
+    local idx
+    for ((idx = total - 1; idx >= 0; idx--)); do
+        local service="${services[idx]}"
+        ((i++))
+        _dc stop "$service" >/dev/null 2>&1 &
+        local stop_pid=$!
+        if ! spinner "$stop_pid" "Stopping ${service}... (${i}/${total})"; then
+            print_fail "${service} failed to stop"
+        fi
+    done
+
+    _dc down >/dev/null 2>&1 &
+    local down_pid=$!
+    if ! spinner "$down_pid" "Removing containers and network..."; then
+        print_fail "Teardown failed"
+        return 1
+    fi
+}
+
 # --- Convenience shortcuts ---
 
 bitcoin_cli() {
@@ -153,13 +236,11 @@ lncli() {
 is_running() {
     local service="$1"
     local status
-    status="$(eval "$(_compose_cmd) ps --status running --format '{{.Name}}' 2>/dev/null")" || return 1
-    echo "$status" | grep -q "${service}"
+    status="$(_dc ps --status running --format '{{.Name}}' 2>/dev/null)" || return 1
+    echo "$status" | grep -qx "${service}"
 }
 
 # Check if services are built
 is_built() {
-    local docker
-    docker="$(_docker_cmd)"
-    eval "${docker} image ls --format '{{.Repository}}' 2>/dev/null" | grep -q "awning"
+    _docker image ls --format '{{.Repository}}' 2>/dev/null | grep -q "awning"
 }

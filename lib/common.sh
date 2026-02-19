@@ -67,7 +67,7 @@ draw_header() {
     local padding=$(( (width - ${#title}) / 2 ))
     printf '  %b' "$BOX_V"
     printf '%*s' "$padding" ""
-    printf '%b' "${BOLD}${title}${NC}"
+    printf '%b' "${BOLD}${CYAN}${title}${NC}"
     printf '%*s' "$(( width - padding - ${#title} ))" ""
     printf '%b\n' "$BOX_V"
 
@@ -323,7 +323,7 @@ awning_path() {
 # Count running services
 count_running_services() {
     local count
-    count="$(eval "$(_compose_cmd) ps --status running --format '{{.Name}}' 2>/dev/null" | wc -l)" || count=0
+    count="$(_dc ps --status running --format '{{.Name}}' 2>/dev/null | wc -l)" || count=0
     echo "$count"
 }
 
@@ -334,13 +334,16 @@ get_status_label() {
         return
     fi
 
-    local running
+    local running total
     running="$(count_running_services)"
+    local svc_list
+    read -ra svc_list <<< "$(active_services)"
+    total=${#svc_list[@]}
 
-    if [[ "$running" -ge 6 ]]; then
+    if [[ "$running" -ge "$total" ]]; then
         echo -e "${ICON_BOLT} All services running"
     elif [[ "$running" -gt 0 ]]; then
-        echo -e "${YELLOW}${running}/6 services running${NC}"
+        echo -e "${YELLOW}${running}/${total} services running${NC}"
     else
         echo -e "${DIM}Services stopped${NC}"
     fi
