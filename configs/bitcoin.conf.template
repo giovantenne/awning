@@ -28,7 +28,7 @@ zmqpubrawtx=tcp://0.0.0.0:28333
 
 # Resource limits
 maxconnections=40
-maxuploadtarget=5000
+maxuploadtarget=0
 
 # Initial block download optimizations (uncomment during IBD, then re-comment)
 # dbcache=2000
