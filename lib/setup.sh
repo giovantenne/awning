@@ -451,12 +451,12 @@ step_scb_config() {
         mkdir -p "$scb_ssh_dir"
 
         local key_priv key_pub
-        if [[ -f "${scb_ssh_dir}/id_ed25519" || -f "${scb_ssh_dir}/id_ed25519.pub" ]]; then
-            key_priv="${scb_ssh_dir}/id_ed25519"
-            key_pub="${scb_ssh_dir}/id_ed25519.pub"
-        elif [[ -f "${scb_ssh_dir}/id_rsa" || -f "${scb_ssh_dir}/id_rsa.pub" ]]; then
+        if [[ -f "${scb_ssh_dir}/id_rsa" || -f "${scb_ssh_dir}/id_rsa.pub" ]]; then
             key_priv="${scb_ssh_dir}/id_rsa"
             key_pub="${scb_ssh_dir}/id_rsa.pub"
+        elif [[ -f "${scb_ssh_dir}/id_ed25519" || -f "${scb_ssh_dir}/id_ed25519.pub" ]]; then
+            key_priv="${scb_ssh_dir}/id_ed25519"
+            key_pub="${scb_ssh_dir}/id_ed25519.pub"
         else
             key_priv="${scb_ssh_dir}/id_ed25519"
             key_pub="${scb_ssh_dir}/id_ed25519.pub"

@@ -16,10 +16,10 @@ heartbeat() { date +%s > "${HEARTBEAT_FILE}"; }
 
 # --- SSH key setup ---
 mkdir -p /data/.ssh
-if [ -f /data/.ssh/id_ed25519 ]; then
-    SSH_KEY="/data/.ssh/id_ed25519"
-elif [ -f /data/.ssh/id_rsa ]; then
+if [ -f /data/.ssh/id_rsa ]; then
     SSH_KEY="/data/.ssh/id_rsa"
+elif [ -f /data/.ssh/id_ed25519 ]; then
+    SSH_KEY="/data/.ssh/id_ed25519"
 else
     log "Generating SSH key..."
     ssh-keygen -t ed25519 -f /data/.ssh/id_ed25519 -N "" -q
