@@ -10,9 +10,27 @@ BACKUP_DIR="/data/backups"
 MAX_RETRY_DELAY=300  # 5 minutes max between retries
 HEARTBEAT_FILE="/tmp/scb_heartbeat"
 SSH_KEY=""
+HEARTBEAT_PID=""
 
 log() { echo "[SCB] $(date '+%H:%M:%S') $*"; }
 heartbeat() { date +%s > "${HEARTBEAT_FILE}"; }
+
+start_heartbeat_loop() {
+    (
+        while true; do
+            heartbeat
+            sleep 20
+        done
+    ) &
+    HEARTBEAT_PID="$!"
+}
+
+cleanup() {
+    if [ -n "${HEARTBEAT_PID}" ] && kill -0 "${HEARTBEAT_PID}" 2>/dev/null; then
+        kill "${HEARTBEAT_PID}" 2>/dev/null || true
+    fi
+}
+trap cleanup EXIT INT TERM
 
 # --- SSH key setup ---
 mkdir -p /data/.ssh
@@ -110,19 +128,20 @@ push_backup() {
 
 # --- Main loop ---
 setup_repo
-heartbeat
+start_heartbeat_loop
 
 log "Watching for channel.backup changes..."
 while true; do
     if [ -f "${SCB_SOURCE}" ]; then
-        heartbeat
-        inotifywait -q -e modify,create "${SCB_SOURCE}"
+        # Keep waiting even if the file is rotated/replaced by LND.
+        while ! inotifywait -q -e modify,create,move,delete_self "${SCB_SOURCE}"; do
+            log "inotify watch interrupted, retrying in 3s..."
+            sleep 3
+        done
         log "channel.backup changed, backing up..."
         push_backup || log "WARNING: Backup failed, will retry on next change"
-        heartbeat
     else
         log "Waiting for LND to create channel.backup..."
-        heartbeat
         sleep 30
     fi
 done
