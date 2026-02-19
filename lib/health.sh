@@ -93,6 +93,11 @@ show_status() {
     if is_running lnd; then
         show_lnd_status
     fi
+
+    # Electrs status
+    if is_running electrs; then
+        show_electrs_status
+    fi
 }
 
 # Bitcoin Core sync status with progress bar
@@ -172,6 +177,92 @@ show_lnd_status() {
     local lightning
     lightning="$(echo "$ch_balance" | jq -r '.local_balance.sat // "0"')"
     echo -e "    Lightning:   ${lightning} sats"
+
+    echo ""
+}
+
+# Electrs status with indexing progress (best effort from logs)
+show_electrs_status() {
+    local health
+    health="$(_docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}unknown{{end}}' electrs 2>/dev/null)" || health="unknown"
+
+    local logs last_chain_line last_index_line electrs_height electrs_tip index_range
+    logs="$(_docker logs --tail 200 electrs 2>/dev/null)" || logs=""
+    if [[ -z "$logs" ]]; then
+        logs="$(_dc logs --no-log-prefix --tail 200 electrs 2>/dev/null)" || logs=""
+    fi
+    last_chain_line="$(echo "$logs" | grep 'chain updated: tip=' | tail -1)" || last_chain_line=""
+    last_index_line="$(echo "$logs" | grep 'indexing ' | tail -1)" || last_index_line=""
+
+    electrs_height="$(echo "$last_chain_line" | sed -n 's/.*height=\([0-9]\+\).*/\1/p')"
+    electrs_tip="$(echo "$last_chain_line" | sed -n 's/.*tip=\([0-9a-f]\{64\}\).*/\1/p')"
+    index_range="$(echo "$last_index_line" | sed -n 's/.*indexing [0-9]\+ blocks: \(\[[0-9]\+\.\.[0-9]\+\]\).*/\1/p')"
+
+    local availability="unknown"
+    local availability_detail=""
+    local ready_icon="${GREEN}✓${NC}"
+    local wait_icon="${YELLOW}…${NC}"
+
+    echo -e "  ${BOLD}Electrs${NC}"
+    echo -e "    Health:      ${health}"
+
+    if [[ -n "$electrs_height" ]]; then
+        echo -e "    Indexed:     height ${electrs_height}"
+    fi
+
+    if [[ -n "$index_range" ]]; then
+        echo -e "    Indexing:    ${index_range}"
+    fi
+
+    # If Electrs logs show active indexing, it is not yet usable.
+    if [[ -n "$index_range" ]]; then
+        availability="not ready"
+        availability_detail="syncing"
+    fi
+
+    if [[ -n "$electrs_height" ]] && is_running bitcoin 2>/dev/null; then
+        local binfo bheight pct
+        binfo="$(bitcoin_cli getblockchaininfo 2>/dev/null)" || binfo=""
+        bheight="$(echo "$binfo" | jq -r '.blocks // empty' 2>/dev/null)" || bheight=""
+        if [[ -n "$bheight" ]] && [[ "$bheight" =~ ^[0-9]+$ ]] && [[ "$bheight" -gt 0 ]]; then
+            pct="$(awk -v e="$electrs_height" -v b="$bheight" 'BEGIN { printf "%.2f", (e*100)/b }')"
+            echo -e "    Progress:    ${pct}% (${electrs_height}/${bheight})"
+            if [[ "$electrs_height" -lt "$bheight" ]]; then
+                availability="not ready"
+                availability_detail="syncing"
+            else
+                if [[ "$availability" != "not ready" ]]; then
+                    availability="ready"
+                fi
+            fi
+        fi
+    fi
+
+    if [[ -n "$electrs_tip" ]]; then
+        echo -e "    Tip:         ${electrs_tip}"
+    fi
+
+    # Fallback readiness when height comparison is unavailable.
+    if [[ "$availability" == "unknown" ]]; then
+        if [[ -n "$index_range" ]] || [[ "$health" == "starting" ]]; then
+            availability="not ready"
+            availability_detail="syncing"
+        elif [[ "$health" == "healthy" ]]; then
+            availability="unknown"
+            availability_detail="cannot verify sync progress"
+        else
+            availability="not ready"
+            availability_detail="$health"
+        fi
+    fi
+
+    if [[ "$availability" == "ready" ]]; then
+        echo -e "    Usability:   ${ready_icon} ready for wallets"
+    elif [[ "$availability" == "unknown" ]]; then
+        echo -e "    Usability:   ${YELLOW}?${NC} unknown ${DIM}(${availability_detail})${NC}"
+    else
+        echo -e "    Usability:   ${wait_icon} not ready ${DIM}(${availability_detail})${NC}"
+    fi
 
     echo ""
 }
