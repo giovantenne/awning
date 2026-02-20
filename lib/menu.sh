@@ -4,13 +4,9 @@
 # All submenus have clear screen, back option, and robust input handling
 
 show_menu() {
-    while true; do
+    render_main_menu() {
+        local status_label="$1"
         clear 2>/dev/null || true
-
-        # Get live status for header
-        local status_label
-        status_label="$(get_status_label 2>/dev/null)" || status_label="${DIM}unknown${NC}"
-
         draw_header "AWNING v2.0" "${status_label}"
         echo ""
         echo -e "  ${BOLD}${WHITE}1)${NC} Status        ${DIM}Dashboard with sync progress${NC}"
@@ -21,22 +17,53 @@ show_menu() {
         echo -e "  ${BOLD}${WHITE}6)${NC} System        ${DIM}Start, stop, restart, rebuild${NC}"
         echo -e "  ${BOLD}${WHITE}0)${NC} Exit"
         echo ""
+    }
 
+    refresh_main_menu() {
+        status_label="$(get_status_label 2>/dev/null)" || status_label="${DIM}unknown${NC}"
+        render_main_menu "$status_label"
+    }
+
+    local status_label
+    refresh_main_menu
+
+    while true; do
         local choice
-        if ! read -r -t 10 -p "$(echo -e "  ${YELLOW}Choose [0-6]:${NC} ")" choice; then
-            # Auto-refresh menu every 10s to update live status subtitle.
-            continue
-        fi
+        local prompt
+        prompt="$(echo -e "${YELLOW}Choose [0-6]:${NC} ")"
+        printf "  %b" "$prompt"
 
+        local ticks=0
+        while true; do
+            if read -r -t 1 choice; then
+                break
+            fi
+
+            ticks=$((ticks + 1))
+            if (( ticks < 10 )); then
+                continue
+            fi
+            ticks=0
+
+            local next_status_label
+            next_status_label="$(get_status_label 2>/dev/null)" || next_status_label="${DIM}unknown${NC}"
+            if [[ "$next_status_label" != "$status_label" ]]; then
+                status_label="$next_status_label"
+                render_main_menu "$status_label"
+                printf "  %b" "$prompt"
+            fi
+        done
+
+        echo ""
         case "$choice" in
-            1) menu_status ;;
-            2) menu_logs ;;
-            3) menu_connections ;;
-            4) menu_wallet ;;
-            5) menu_tools ;;
-            6) menu_system ;;
+            1) menu_status; refresh_main_menu ;;
+            2) menu_logs; refresh_main_menu ;;
+            3) menu_connections; refresh_main_menu ;;
+            4) menu_wallet; refresh_main_menu ;;
+            5) menu_tools; refresh_main_menu ;;
+            6) menu_system; refresh_main_menu ;;
             0|q|Q) echo ""; exit 0 ;;
-            *) print_warn "Invalid choice"; sleep 0.5 ;;
+            *) print_warn "Invalid choice"; sleep 0.5; render_main_menu "$status_label" ;;
         esac
     done
 }
@@ -129,16 +156,25 @@ menu_tools() {
     echo -e "  ${BOLD}${WHITE}1)${NC} Bitcoin CLI    ${DIM}Interactive bitcoin-cli${NC}"
     echo -e "  ${BOLD}${WHITE}2)${NC} LND CLI        ${DIM}Interactive lncli${NC}"
     echo -e "  ${BOLD}${WHITE}3)${NC} Backup (SCB)   ${DIM}Channel backup status/actions${NC}"
+    echo -e "  ${BOLD}${WHITE}4)${NC} Setup wizard   ${DIM}Rerun setup and update versions${NC}"
     echo -e "  ${BOLD}${WHITE}0)${NC} Back"
     echo ""
 
     local choice
-    read -r -p "$(echo -e "  ${YELLOW}Choose [0-3]:${NC} ")" choice
+    read -r -p "$(echo -e "  ${YELLOW}Choose [0-4]:${NC} ")" choice
 
     case "$choice" in
         1)  menu_bitcoin_cli ;;
         2)  menu_lncli ;;
         3)  menu_backup ;;
+        4)  clear 2>/dev/null || true
+            if run_setup; then
+                print_check "Setup complete"
+            else
+                print_warn "Setup interrupted or failed"
+            fi
+            menu_pause
+            ;;
         0|"") ;;
         *)  print_warn "Invalid choice"; sleep 0.5 ;;
     esac

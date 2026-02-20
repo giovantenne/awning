@@ -510,9 +510,9 @@ step_scb_config() {
             else
                 echo -e "  ${BOLD}Add this key in your repository Deploy Keys settings.${NC}"
             fi
-            echo -e "  ${BOLD}Title:${NC} ${RED}${key_title}${NC}"
-            echo -e "  ${BOLD}Key:${NC}   ${RED}${pubkey}${NC}"
-            echo -e "  ${BOLD}${RED}(Enable Allow write access)${NC}"
+            echo -e "  ${BOLD}Title:${NC} ${ORANGE}${key_title}${NC}"
+            echo -e "  ${BOLD}Key:${NC}   ${ORANGE}${pubkey}${NC}"
+            echo -e "  ${BOLD}${ORANGE}(Enable Allow write access)${NC}"
             echo ""
 
             # Test write access (dry-run push) if git+ssh are available

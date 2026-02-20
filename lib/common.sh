@@ -16,9 +16,10 @@ ADMIN_MACAROON_SUBPATH="data/chain/bitcoin/mainnet/admin.macaroon"
 # Colors (respects NO_COLOR convention: https://no-color.org/)
 # ============================================================
 if [[ -n "${NO_COLOR:-}" ]] || [[ "${TERM:-}" == "dumb" ]] || ! [[ -t 1 ]]; then
-    RED='' GREEN='' YELLOW='' BLUE='' CYAN='' WHITE='' BOLD='' DIM='' UNDERLINE='' NC=''
+    RED='' ORANGE='' GREEN='' YELLOW='' BLUE='' CYAN='' WHITE='' BOLD='' DIM='' UNDERLINE='' NC=''
 else
     RED='\033[0;31m'
+    ORANGE='\033[38;5;208m'
     GREEN='\033[0;32m'
     YELLOW='\033[0;33m'
     BLUE='\033[0;34m'
