@@ -11,28 +11,30 @@ show_menu() {
         local status_label
         status_label="$(get_status_label 2>/dev/null)" || status_label="${DIM}unknown${NC}"
 
-        draw_header "AWNING v2.0" ""
-        echo -e "  ${status_label}"
+        draw_header "AWNING v2.0" "${status_label}"
         echo ""
         echo -e "  ${BOLD}${WHITE}1)${NC} Status        ${DIM}Dashboard with sync progress${NC}"
         echo -e "  ${BOLD}${WHITE}2)${NC} Logs          ${DIM}View service logs${NC}"
         echo -e "  ${BOLD}${WHITE}3)${NC} Connections   ${DIM}Tor addresses, LND connect URI${NC}"
         echo -e "  ${BOLD}${WHITE}4)${NC} Wallet        ${DIM}Create, unlock, balances${NC}"
-        echo -e "  ${BOLD}${WHITE}5)${NC} Tools         ${DIM}Start, stop, rebuild, CLI${NC}"
-        echo -e "  ${BOLD}${WHITE}6)${NC} Backup        ${DIM}SCB status, manual trigger${NC}"
+        echo -e "  ${BOLD}${WHITE}5)${NC} Tools         ${DIM}CLI and backup utilities${NC}"
+        echo -e "  ${BOLD}${WHITE}6)${NC} System        ${DIM}Start, stop, restart, rebuild${NC}"
         echo -e "  ${BOLD}${WHITE}0)${NC} Exit"
         echo ""
 
         local choice
-        read -r -p "$(echo -e "  ${YELLOW}Choose [0-6]:${NC} ")" choice
+        if ! read -r -t 10 -p "$(echo -e "  ${YELLOW}Choose [0-6]:${NC} ")" choice; then
+            # Auto-refresh menu every 10s to update live status subtitle.
+            continue
+        fi
 
         case "$choice" in
-            1) show_status 2>/dev/null; menu_pause ;;
+            1) menu_status ;;
             2) menu_logs ;;
-            3) show_connections 2>/dev/null; menu_pause ;;
+            3) menu_connections ;;
             4) menu_wallet ;;
             5) menu_tools ;;
-            6) menu_backup ;;
+            6) menu_system ;;
             0|q|Q) echo ""; exit 0 ;;
             *) print_warn "Invalid choice"; sleep 0.5 ;;
         esac
@@ -45,10 +47,23 @@ menu_pause() {
     read -r -p "$(echo -e "  ${DIM}Press Enter to continue...${NC}")" _
 }
 
+# --- Status and connections wrappers ---
+menu_status() {
+    clear 2>/dev/null || true
+    show_status 2>/dev/null
+    menu_pause
+}
+
+menu_connections() {
+    clear 2>/dev/null || true
+    show_connections 2>/dev/null
+    menu_pause
+}
+
 # --- Logs submenu ---
 menu_logs() {
     clear 2>/dev/null || true
-    draw_header "VIEW LOGS" ""
+    draw_header "VIEW LOGS" "Service Logs"
     echo ""
     echo -e "  ${BOLD}${WHITE}1)${NC} All services"
     echo -e "  ${BOLD}${WHITE}2)${NC} Bitcoin Core"
@@ -109,38 +124,67 @@ menu_logs() {
 # --- Tools submenu ---
 menu_tools() {
     clear 2>/dev/null || true
-    draw_header "TOOLS" ""
+    draw_header "TOOLS" "Service Operations"
+    echo ""
+    echo -e "  ${BOLD}${WHITE}1)${NC} Bitcoin CLI    ${DIM}Interactive bitcoin-cli${NC}"
+    echo -e "  ${BOLD}${WHITE}2)${NC} LND CLI        ${DIM}Interactive lncli${NC}"
+    echo -e "  ${BOLD}${WHITE}3)${NC} Backup (SCB)   ${DIM}Channel backup status/actions${NC}"
+    echo -e "  ${BOLD}${WHITE}0)${NC} Back"
+    echo ""
+
+    local choice
+    read -r -p "$(echo -e "  ${YELLOW}Choose [0-3]:${NC} ")" choice
+
+    case "$choice" in
+        1)  menu_bitcoin_cli ;;
+        2)  menu_lncli ;;
+        3)  menu_backup ;;
+        0|"") ;;
+        *)  print_warn "Invalid choice"; sleep 0.5 ;;
+    esac
+}
+
+menu_system() {
+    clear 2>/dev/null || true
+    draw_header "SYSTEM" "Service Lifecycle"
     echo ""
     echo -e "  ${BOLD}${WHITE}1)${NC} Start          ${DIM}Start all services${NC}"
     echo -e "  ${BOLD}${WHITE}2)${NC} Stop           ${DIM}Stop all services${NC}"
     echo -e "  ${BOLD}${WHITE}3)${NC} Restart        ${DIM}Restart all services${NC}"
     echo -e "  ${BOLD}${WHITE}4)${NC} Rebuild        ${DIM}Rebuild and restart${NC}"
-    echo -e "  ${BOLD}${WHITE}5)${NC} Bitcoin CLI    ${DIM}Interactive bitcoin-cli${NC}"
-    echo -e "  ${BOLD}${WHITE}6)${NC} LND CLI        ${DIM}Interactive lncli${NC}"
     echo -e "  ${BOLD}${WHITE}0)${NC} Back"
     echo ""
 
     local choice
-    read -r -p "$(echo -e "  ${YELLOW}Choose [0-6]:${NC} ")" choice
+    read -r -p "$(echo -e "  ${YELLOW}Choose [0-4]:${NC} ")" choice
 
     case "$choice" in
-        1)  echo ""
+        1)  clear 2>/dev/null || true
+            draw_header "SYSTEM" "Service Lifecycle"
+            echo ""
             dc_start_services 2>/dev/null
             menu_pause
             ;;
-        2)  echo ""
+        2)  clear 2>/dev/null || true
+            draw_header "SYSTEM" "Service Lifecycle"
+            echo ""
             dc_stop_services 2>/dev/null
             print_check "Services stopped"
             menu_pause
             ;;
-        3)  echo ""
-            dc_restart 2>/dev/null
-            print_check "Services restarted"
+        3)  clear 2>/dev/null || true
+            draw_header "SYSTEM" "Service Lifecycle"
+            echo ""
+            dc_restart >/dev/null 2>&1 &
+            local restart_pid=$!
+            if spinner "$restart_pid" "Restarting services..."; then
+                print_check "Services restarted"
+            else
+                print_fail "Failed to restart services"
+            fi
             menu_pause
             ;;
         4)  menu_update ;;
-        5)  menu_bitcoin_cli ;;
-        6)  menu_lncli ;;
         0|"") ;;
         *)  print_warn "Invalid choice"; sleep 0.5 ;;
     esac
@@ -149,7 +193,7 @@ menu_tools() {
 # --- Update (rebuild) ---
 menu_update() {
     clear 2>/dev/null || true
-    draw_header "REBUILD" ""
+    draw_header "REBUILD" "Build & Restart Services"
     echo ""
     print_info "This will rebuild Docker images with current versions from .env"
     print_info "and restart all services."
@@ -175,7 +219,7 @@ menu_update() {
 menu_wallet() {
     while true; do
         clear 2>/dev/null || true
-        draw_header "WALLET" ""
+        draw_header "WALLET" "On-chain & Lightning"
         echo ""
         echo -e "  ${BOLD}${WHITE}1)${NC} Wallet balance    ${DIM}On-chain balance${NC}"
         echo -e "  ${BOLD}${WHITE}2)${NC} Channel balance   ${DIM}Lightning balance${NC}"
@@ -321,7 +365,7 @@ show_new_address_ui() {
 # --- Backup submenu ---
 menu_backup() {
     clear 2>/dev/null || true
-    draw_header "BACKUP (SCB)" ""
+    draw_header "BACKUP (SCB)" "Static Channel Backup"
     echo ""
 
     # Check SCB status
@@ -371,13 +415,51 @@ menu_backup() {
         1)
             echo ""
             if dc_is_running scb 2>/dev/null; then
-                dc_restart scb 2>/dev/null &
-                local restart_pid=$!
-                if spinner "$restart_pid" "Triggering backup (restarting SCB)..."; then
-                    print_check "Backup triggered (SCB restarted)"
+                local trigger_log
+                trigger_log="$(mktemp /tmp/awning-scb-trigger.XXXXXX)"
+
+                (
+                    _dc exec -T scb sh -lc '
+set -e
+SCB_SOURCE="/lnd/data/chain/bitcoin/mainnet/channel.backup"
+BACKUP_DIR="/data/backups"
+
+if [[ ! -f "${SCB_SOURCE}" ]]; then
+    echo "__ERR__:channel.backup_not_found"
+    exit 2
+fi
+
+cd "${BACKUP_DIR}"
+cp "${SCB_SOURCE}" "${BACKUP_DIR}/channel.backup"
+git add channel.backup
+
+if git diff --cached --quiet; then
+    echo "__NO_CHANGES__"
+    exit 0
+fi
+
+git commit -m "SCB manual $(date +"%Y-%m-%d %H:%M:%S")" >/dev/null
+git push origin HEAD >/dev/null
+echo "__PUSHED__"
+' >"${trigger_log}" 2>&1
+                ) &
+                local trigger_pid=$!
+
+                if spinner "$trigger_pid" "Triggering backup now..."; then
+                    if grep -q "__PUSHED__" "${trigger_log}"; then
+                        print_check "Backup pushed successfully"
+                    elif grep -q "__NO_CHANGES__" "${trigger_log}"; then
+                        print_info "No changes in channel.backup since last commit"
+                    else
+                        print_warn "Backup command completed, but no status marker was returned"
+                    fi
                 else
-                    print_fail "Failed to trigger backup"
+                    print_fail "Manual backup failed"
+                    sed -n '1,80p' "${trigger_log}" | while IFS= read -r line; do
+                        echo "  $line"
+                    done
                 fi
+                rm -f "${trigger_log}"
             else
                 print_fail "SCB is not running"
             fi
@@ -395,7 +477,7 @@ menu_backup() {
 # --- Interactive CLI ---
 menu_bitcoin_cli() {
     clear 2>/dev/null || true
-    draw_header "BITCOIN CLI" ""
+    draw_header "BITCOIN CLI" "Interactive bitcoin-cli"
     echo ""
     print_info "Interactive bitcoin-cli ${DIM}(type 'exit' or 'quit' to return)${NC}"
     echo ""
@@ -418,7 +500,7 @@ menu_bitcoin_cli() {
 
 menu_lncli() {
     clear 2>/dev/null || true
-    draw_header "LND CLI" ""
+    draw_header "LND CLI" "Interactive lncli"
     echo ""
     print_info "Interactive lncli ${DIM}(type 'exit' or 'quit' to return)${NC}"
     echo ""

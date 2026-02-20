@@ -35,7 +35,7 @@ show_status() {
         local status health detail state_label
         status="$(dc_get_status "$service")"
         health="$(dc_get_health "$service")"
-        detail=""
+        detail="-"
         state_label=""
 
         # Show sync progress on the bitcoin row
@@ -95,10 +95,6 @@ show_status() {
         show_electrs_status
     fi
 
-    # RTL status (only when enabled)
-    if [[ -n "${RTL_PASSWORD:-}" ]] && dc_is_running rtl; then
-        show_rtl_status
-    fi
 }
 
 # Bitcoin Core sync status with progress bar
@@ -205,42 +201,25 @@ show_electrs_status() {
     local wait_icon="${YELLOW}…${NC}"
 
     echo -e "  ${BOLD}Electrs${NC}"
-    echo -e "    Health:      ${health}"
-
-    if [[ -n "$electrs_height" ]]; then
-        echo -e "    Indexed:     height ${electrs_height}"
-    fi
-
-    if [[ -n "$index_range" ]]; then
-        echo -e "    Indexing:    ${index_range}"
-    fi
-
-    # If Electrs logs show active indexing, it is not yet usable.
-    if [[ -n "$index_range" ]]; then
-        availability="not ready"
-        availability_detail="syncing"
-    fi
 
     if [[ -n "$electrs_height" ]] && dc_is_running bitcoin 2>/dev/null; then
-        local binfo bheight pct
+        local binfo bheight pct lag
         binfo="$(bitcoin_cli getblockchaininfo 2>/dev/null)" || binfo=""
         bheight="$(echo "$binfo" | jq -r '.blocks // empty' 2>/dev/null)" || bheight=""
         if [[ -n "$bheight" ]] && [[ "$bheight" =~ ^[0-9]+$ ]] && [[ "$bheight" -gt 0 ]]; then
             pct="$(awk -v e="$electrs_height" -v b="$bheight" 'BEGIN { printf "%.2f", (e*100)/b }')"
             echo -e "    Progress:    ${pct}% (${electrs_height}/${bheight})"
-            if [[ "$electrs_height" -lt "$bheight" ]]; then
+            lag=$((bheight - electrs_height))
+            if (( lag <= 2 )); then
+                availability="ready"
+                availability_detail=""
+            elif [[ "$electrs_height" -lt "$bheight" ]]; then
                 availability="not ready"
                 availability_detail="syncing"
             else
-                if [[ "$availability" != "not ready" ]]; then
-                    availability="ready"
-                fi
+                availability="ready"
             fi
         fi
-    fi
-
-    if [[ -n "$electrs_tip" ]]; then
-        echo -e "    Tip:         ${electrs_tip}"
     fi
 
     # Fallback readiness when height comparison is unavailable.
@@ -263,32 +242,6 @@ show_electrs_status() {
         echo -e "    Usability:   ${YELLOW}?${NC} unknown ${DIM}(${availability_detail})${NC}"
     else
         echo -e "    Usability:   ${wait_icon} not ready ${DIM}(${availability_detail})${NC}"
-    fi
-
-    echo ""
-}
-
-# RTL web interface status
-show_rtl_status() {
-    local health
-    health="$(dc_get_health rtl)"
-    [[ -z "$health" ]] && health="unknown"
-
-    echo -e "  ${BOLD}RTL${NC}"
-    echo -e "    Health:      ${health}"
-
-    local rtl_bind rtl_port rtl_host
-    rtl_bind="${RTL_BIND:-127.0.0.1}"
-    rtl_port="${RTL_PORT:-3000}"
-    rtl_host="${rtl_bind}"
-    if [[ "$rtl_bind" == "0.0.0.0" ]]; then
-        rtl_host="$(hostname -I 2>/dev/null | awk '{print $1}')" || rtl_host="<your-ip>"
-    fi
-
-    if [[ "$health" == "healthy" ]]; then
-        echo -e "    Web UI:      ${WHITE}${UNDERLINE}http://${rtl_host}:${rtl_port}${NC}"
-    else
-        echo -e "    Web UI:      ${WHITE}${UNDERLINE}http://${rtl_host}:${rtl_port}${NC} ${DIM}(not ready)${NC}"
     fi
 
     echo ""
@@ -377,7 +330,7 @@ show_connections() {
         local lnd_data
         lnd_data="$(awning_path data/lnd)"
         if [[ -f "${lnd_data}/${ADMIN_MACAROON_SUBPATH}" ]]; then
-            print_info "Generate connection with: ${CYAN}./awning.sh zeus-connect${NC}"
+            print_info "Generate connection with: ${CYAN}Wallet > Zeus connect${NC} ${DIM}or${NC} ${CYAN}./awning.sh zeus-connect${NC}"
         else
             print_warn "LND macaroon not yet generated (create wallet first)"
         fi

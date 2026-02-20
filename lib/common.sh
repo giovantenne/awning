@@ -77,6 +77,23 @@ draw_line() {
 
 # Draw a box header with centered title and optional subtitle
 # Usage: draw_header "AWNING SETUP" "Bitcoin + Lightning Node"
+_display_width() {
+    local s="$1"
+    local w=${#s}
+    local t count
+
+    # Compensate common wide glyphs used in UI labels.
+    for t in "⚡" "⚠" "✓" "✗" "▓" "░"; do
+        count=0
+        while [[ "$s" == *"$t"* ]]; do
+            s="${s/"$t"/}"
+            count=$((count + 1))
+        done
+        w=$((w + count))
+    done
+    echo "$w"
+}
+
 draw_header() {
     local title="$1"
     local subtitle="${2:-}"
@@ -91,21 +108,31 @@ draw_header() {
     draw_line "$width"
     printf '%b\n' "$BOX_TR"
 
-    # Title line (centered)
-    local padding=$(( (width - ${#title}) / 2 ))
+    # Title line (centered, ANSI-safe width)
+    local title_visible
+    title_visible="$(echo -e "$title" | sed 's/\x1b\[[0-9;]*[A-Za-z]//g')"
+    local title_len
+    title_len="$(_display_width "$title_visible")"
+    local padding=$(( (width - title_len) / 2 ))
+    (( padding < 0 )) && padding=0
     printf '  %b' "$BOX_V"
     printf '%*s' "$padding" ""
     printf '%b' "${BOLD}${CYAN}${title}${NC}"
-    printf '%*s' "$(( width - padding - ${#title} ))" ""
+    printf '%*s' "$(( width - padding - title_len ))" ""
     printf '%b\n' "$BOX_V"
 
     # Subtitle line (centered) if provided
     if [[ -n "$subtitle" ]]; then
-        local sub_padding=$(( (width - ${#subtitle}) / 2 ))
+        local subtitle_visible
+        subtitle_visible="$(echo -e "$subtitle" | sed 's/\x1b\[[0-9;]*[A-Za-z]//g')"
+        local subtitle_len
+        subtitle_len="$(_display_width "$subtitle_visible")"
+        local sub_padding=$(( (width - subtitle_len) / 2 ))
+        (( sub_padding < 0 )) && sub_padding=0
         printf '  %b' "$BOX_V"
         printf '%*s' "$sub_padding" ""
         printf '%b' "${subtitle}"
-        printf '%*s' "$(( width - sub_padding - ${#subtitle} ))" ""
+        printf '%*s' "$(( width - sub_padding - subtitle_len ))" ""
         printf '%b\n' "$BOX_V"
     fi
 
@@ -386,14 +413,48 @@ get_status_label() {
         return
     fi
 
-    local running total
-    running="$(count_running_services)"
     local svc_list
     read -ra svc_list <<< "$(dc_active_services)"
+    local total running healthy starting unhealthy
     total=${#svc_list[@]}
+    running=0
+    healthy=0
+    starting=0
+    unhealthy=0
 
-    if [[ "$running" -ge "$total" ]]; then
-        echo -e "${ICON_BOLT} All services running"
+    local service status health
+    for service in "${svc_list[@]}"; do
+        status="$(dc_get_status "$service")"
+        health="$(dc_get_health "$service")"
+
+        if [[ "$status" == "running" ]]; then
+            running=$((running + 1))
+            case "$health" in
+                healthy)
+                    healthy=$((healthy + 1))
+                    ;;
+                starting)
+                    starting=$((starting + 1))
+                    ;;
+                unhealthy)
+                    unhealthy=$((unhealthy + 1))
+                    ;;
+                *)
+                    # Services without healthcheck are considered ready when running.
+                    healthy=$((healthy + 1))
+                    ;;
+            esac
+        elif [[ "$status" == "restarting" ]]; then
+            starting=$((starting + 1))
+        fi
+    done
+
+    if [[ "$running" -eq "$total" ]] && [[ "$healthy" -eq "$total" ]]; then
+        echo -e "${GREEN}${ICON_BOLT} All services healthy${NC}"
+    elif [[ "$running" -eq "$total" ]] && [[ "$starting" -gt 0 ]]; then
+        echo -e "${YELLOW}${ICON_BOLT} Services starting (${starting})${NC}"
+    elif [[ "$unhealthy" -gt 0 ]]; then
+        echo -e "${RED}${ICON_WARN} ${unhealthy} service(s) unhealthy${NC}"
     elif [[ "$running" -gt 0 ]]; then
         echo -e "${YELLOW}${running}/${total} services running${NC}"
     else
