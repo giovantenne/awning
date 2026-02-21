@@ -31,3 +31,6 @@ data/rtl/*
 
 # Generated configs (RTL)
 configs/rtl.conf
+
+# OpenCode session data
+.opencode/

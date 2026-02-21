@@ -291,7 +291,7 @@ dc_start_services() {
         health="$(dc_get_health "$service")"
 
         if [[ -z "$status" ]]; then
-            print_fail "${service} (not found)"
+            print_fail "${service} (stopped)"
         elif [[ "$status" == "running" || "$status" == "restarting" ]]; then
             local annotation=""
             case "$service" in

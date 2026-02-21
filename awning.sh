@@ -49,9 +49,16 @@ main() {
     local env_file
     env_file="$(awning_path .env)"
 
-    # If no .env exists and no command given, run setup wizard
+    # If no .env exists and no command given, run auto-setup
     if [[ -z "$command" && ! -f "$env_file" ]]; then
-        if run_setup; then
+        if run_auto_setup "$setup_ignore_disk_space"; then
+            show_menu
+        fi
+        return
+    fi
+    # Also handle: ./awning.sh --ignore-disk-space (no .env, triggers auto-setup)
+    if [[ ! -f "$env_file" ]] && [[ "$command" == "--ignore-disk-space" || "$command" == "--force" ]]; then
+        if run_auto_setup 1; then
             show_menu
         fi
         return

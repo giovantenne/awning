@@ -44,7 +44,7 @@ show_status() {
         fi
 
         if [[ -z "$status" ]]; then
-            printf "  %-10s ${RED}%-12s${NC} %s\n" "$service" "not found" ""
+            printf "  %-10s ${DIM}%-12s${NC} %s\n" "$service" "stopped" ""
         else
             case "$status" in
                 restarting)
@@ -288,9 +288,18 @@ show_connections() {
     draw_header "CONNECTIONS" "Wallet & Service Access"
     echo ""
 
+    # Check if any service is running
+    local running_count
+    running_count="$(count_running_services)"
+    if [[ "$running_count" -eq 0 ]]; then
+        print_warn "Services are not running. Start them with: ${CYAN}./awning.sh start${NC}"
+        echo ""
+        return
+    fi
+
     echo -e "  ${BOLD}Local Network${NC}"
     local local_ip lnd_bind lnd_port electrs_bind electrs_port lnd_host electrs_host
-    local_ip="$(hostname -I 2>/dev/null | awk '{print $1}')" || local_ip="<your-ip>"
+    local_ip="$(get_lan_ip)"
     lnd_bind="${LND_REST_BIND:-127.0.0.1}"
     lnd_port="${LND_REST_PORT:-8080}"
     electrs_bind="${ELECTRS_SSL_BIND:-127.0.0.1}"

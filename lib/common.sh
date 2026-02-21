@@ -390,6 +390,27 @@ awning_path() {
 }
 
 # ============================================================
+# Network helpers
+# ============================================================
+
+# Detect the primary LAN IPv4 address.
+# Tries multiple methods for portability.
+# Output: IP address string, or "<your-ip>" if detection fails.
+get_lan_ip() {
+    local ip=""
+    # Method 1: ip route (most reliable on Linux)
+    ip="$(ip route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="src") print $(i+1)}')" || true
+    if [[ -n "$ip" ]]; then echo "$ip"; return; fi
+    # Method 2: ip addr
+    ip="$(ip -4 addr show 2>/dev/null | grep -oP 'inet \K[0-9.]+' | grep -v '127.0.0.1' | head -1)" || true
+    if [[ -n "$ip" ]]; then echo "$ip"; return; fi
+    # Method 3: hostname -I
+    ip="$(hostname -I 2>/dev/null | awk '{print $1}')" || true
+    if [[ -n "$ip" ]]; then echo "$ip"; return; fi
+    echo "<your-ip>"
+}
+
+# ============================================================
 # Status helpers
 # ============================================================
 
