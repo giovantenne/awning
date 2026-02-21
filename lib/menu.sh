@@ -547,7 +547,7 @@ menu_backup() {
                 trigger_log="$(mktemp /tmp/awning-scb-trigger.XXXXXX)"
 
                 (
-                    _dc exec -T scb sh -lc '
+                    _dc exec -T scb sh -lc "$(cat <<'EOF'
 set -e
 SCB_SOURCE="/lnd/data/chain/bitcoin/mainnet/channel.backup"
 BACKUP_DIR="/data/backups"
@@ -569,7 +569,8 @@ fi
 git commit -m "SCB manual $(date +"%Y-%m-%d %H:%M:%S")" >/dev/null
 git push origin HEAD >/dev/null
 echo "__PUSHED__"
-' >"${trigger_log}" 2>&1
+EOF
+)" >"${trigger_log}" 2>&1
                 ) &
                 local trigger_pid=$!
 
