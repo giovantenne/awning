@@ -4,17 +4,18 @@ set -euo pipefail
 # Render torrc with runtime-resolved service IPs for HiddenServicePort.
 # Tor requires numeric target addresses for HiddenServicePort directives.
 #
-# Challenge: Tor starts before LND/Electrs (they depend on Tor for SOCKS),
-# so we wait for Docker DNS to resolve their container IPs. Docker creates
-# the containers (and assigns IPs) before starting their processes, so
-# the DNS entries become available shortly after `docker compose up`.
+# Strategy: Tor starts immediately (as SOCKS/control proxy). If LND/Electrs
+# DNS is not yet available, hidden services are omitted from the initial
+# torrc. A background loop keeps retrying DNS resolution and, once all
+# services are found, regenerates torrc with hidden services and sends
+# SIGHUP to Tor to reload the config without restarting.
 
 TORRC_SRC="/etc/tor/torrc"
 TORRC_RENDERED="/tmp/torrc.rendered"
 
 resolve_service_ip() {
     local service="$1"
-    local max_attempts="${2:-60}"
+    local max_attempts="${2:-10}"
     local ip=""
     local i
 
@@ -29,31 +30,78 @@ resolve_service_ip() {
     return 1
 }
 
-echo "Waiting for service DNS resolution..."
+render_torrc_with_services() {
+    local lnd="$1" electrs="$2" rtl="${3:-}"
 
-lnd_ip="$(resolve_service_ip lnd 15)" || lnd_ip=""
-electrs_ip="$(resolve_service_ip electrs 15)" || electrs_ip=""
-rtl_ip="$(resolve_service_ip rtl 10)" || rtl_ip=""
-
-if [[ -z "$lnd_ip" || -z "$electrs_ip" ]]; then
-    echo "WARNING: Could not resolve all service IPs (lnd=${lnd_ip:-?}, electrs=${electrs_ip:-?})" >&2
-    echo "Starting Tor without hidden services. Restart Tor after all services are up." >&2
-    # Strip hidden service blocks from torrc so Tor can start without them
-    grep -v -E '(HiddenService|lnd:|electrs:|rtl:)' "$TORRC_SRC" > "$TORRC_RENDERED"
-else
-    echo "Resolved: lnd=${lnd_ip}, electrs=${electrs_ip}${rtl_ip:+, rtl=${rtl_ip}}"
-    sed -e "s|lnd:8080|${lnd_ip}:8080|g" \
-        -e "s|electrs:50001|${electrs_ip}:50001|g" \
+    sed -e "s|lnd:8080|${lnd}:8080|g" \
+        -e "s|electrs:50001|${electrs}:50001|g" \
         "$TORRC_SRC" > "$TORRC_RENDERED"
 
-    # RTL is optional; strip its hidden service block if not resolvable
-    if [[ -n "$rtl_ip" ]]; then
-        sed -i "s|rtl:3000|${rtl_ip}:3000|g" "$TORRC_RENDERED"
+    if [[ -n "$rtl" ]]; then
+        sed -i "s|rtl:3000|${rtl}:3000|g" "$TORRC_RENDERED"
     else
-        echo "INFO: RTL not running, stripping RTL hidden service from torrc" >&2
         grep -v -E '(hidden_service_rtl|rtl:)' "$TORRC_RENDERED" > "${TORRC_RENDERED}.tmp"
         mv "${TORRC_RENDERED}.tmp" "$TORRC_RENDERED"
     fi
+}
+
+render_torrc_without_services() {
+    grep -v -E '(HiddenService|lnd:|electrs:|rtl:)' "$TORRC_SRC" > "$TORRC_RENDERED"
+}
+
+# --- Initial DNS check (quick, non-blocking) ---
+
+echo "Checking service DNS..."
+
+lnd_ip="$(resolve_service_ip lnd 5)" || lnd_ip=""
+electrs_ip="$(resolve_service_ip electrs 5)" || electrs_ip=""
+rtl_ip="$(resolve_service_ip rtl 3)" || rtl_ip=""
+
+if [[ -n "$lnd_ip" && -n "$electrs_ip" ]]; then
+    echo "Resolved: lnd=${lnd_ip}, electrs=${electrs_ip}${rtl_ip:+, rtl=${rtl_ip}}"
+    render_torrc_with_services "$lnd_ip" "$electrs_ip" "$rtl_ip"
+    exec tor -f "$TORRC_RENDERED"
 fi
 
-exec tor -f "$TORRC_RENDERED"
+# --- Services not ready: start Tor without hidden services ---
+
+echo "Services not ready yet (lnd=${lnd_ip:-?}, electrs=${electrs_ip:-?})"
+echo "Starting Tor without hidden services. Will enable them automatically."
+render_torrc_without_services
+
+tor -f "$TORRC_RENDERED" &
+tor_pid=$!
+
+# Forward SIGTERM/SIGINT to Tor for graceful shutdown
+trap 'kill -TERM "$tor_pid" 2>/dev/null; wait "$tor_pid"' TERM INT
+
+# --- Background loop: wait for services, then reload Tor ---
+
+(
+    max_wait=300
+    waited=0
+
+    while (( waited < max_wait )); do
+        sleep 10
+        waited=$((waited + 10))
+
+        lnd_ip="$(resolve_service_ip lnd 3)" || lnd_ip=""
+        electrs_ip="$(resolve_service_ip electrs 3)" || electrs_ip=""
+        rtl_ip="$(resolve_service_ip rtl 2)" || rtl_ip=""
+
+        if [[ -n "$lnd_ip" && -n "$electrs_ip" ]]; then
+            echo "Resolved: lnd=${lnd_ip}, electrs=${electrs_ip}${rtl_ip:+, rtl=${rtl_ip}}"
+            render_torrc_with_services "$lnd_ip" "$electrs_ip" "$rtl_ip"
+            echo "Reloading Tor with hidden services (SIGHUP)..."
+            kill -HUP "$tor_pid" 2>/dev/null || true
+            exit 0
+        fi
+
+        echo "Waiting for services... (${waited}s/${max_wait}s)"
+    done
+
+    echo "WARNING: Gave up waiting for services after ${max_wait}s. Hidden services not active." >&2
+) &
+
+# Wait for Tor process (keeps container alive)
+wait "$tor_pid"
