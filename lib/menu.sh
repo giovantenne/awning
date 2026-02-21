@@ -136,7 +136,10 @@ menu_logs() {
     fi
 
     echo ""
-    print_info "Showing logs (Ctrl+C to exit)..."
+    print_info "Press Ctrl+C to exit logs."
+    read -r -n 1 -s -p "  Press any key to start logs..."
+    echo ""
+    print_info "Showing logs..."
     # Use trap to catch Ctrl+C gracefully instead of killing the script
     (
         trap 'exit 0' INT
