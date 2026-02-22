@@ -339,7 +339,10 @@ menu_update_awning() {
         echo ""
         print_check "Rebuild complete"
     fi
-    menu_pause
+    echo ""
+    print_warn "Awning has been updated. Please restart Awning to load the new version."
+    read -r -p "$(echo -e "  ${DIM}Press Enter to exit...${NC}")" _
+    exit 0
 }
 
 # --- Update (rebuild) ---

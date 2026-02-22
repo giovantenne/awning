@@ -139,7 +139,7 @@ dc_down_with_spinner() {
 }
 
 dc_restart() {
-    _dc up -d --force-recreate "$@"
+    _dc up -d --force-recreate --no-build "$@"
 
     if _should_refresh_lnd_after_tor_change "restart" "$@"; then
         print_info "Tor was restarted, restarting lnd to refresh Tor SOCKS endpoint..."
