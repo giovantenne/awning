@@ -398,10 +398,10 @@ validate_scb_repo() {
 _GITHUB_CACHE_DIR="/tmp/awning_gh_cache.$$"
 
 # Fetch recent release versions from a GitHub repository.
-# Uses curl + jq (with Docker fallback for jq if not installed on host).
-# Responses are cached per repo for the lifetime of the process so that
-# fetch_latest_github_version + fetch_github_versions for the same repo
-# only hit the API once.
+# Uses curl + jq with per-session caching.
+# Versions are normalized (strip leading "v"), deduplicated, and sorted by
+# semantic version descending so "latest" means numerically highest version
+# across all projects (not just first returned by GitHub API).
 # Args:
 #   $1 - GitHub repo (e.g. "bitcoin/bitcoin")
 #   $2 - Number of releases to return (default: 5)
@@ -430,7 +430,13 @@ fetch_github_versions() {
     fi
 
     local output
-    output="$(jq -r ".[0:${limit}] | .[].tag_name" < "$cache_file" | sed 's/^v//')" || true
+    output="$(
+        jq -r '.[].tag_name' < "$cache_file" \
+        | sed 's/^v//' \
+        | awk 'NF && !seen[$0]++' \
+        | sort -Vr \
+        | head -n "$limit"
+    )" || true
 
     if [[ -z "$output" ]]; then
         return 1
