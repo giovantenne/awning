@@ -11,6 +11,13 @@ set -uo pipefail
 AWNING_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 export AWNING_DIR
 
+# Prevent concurrent executions (flock on file descriptor 9)
+exec 9>"${AWNING_DIR}/.lock"
+if ! flock -n 9; then
+    echo "Error: another instance of awning.sh is already running." >&2
+    exit 1
+fi
+
 # Source library modules
 source "${AWNING_DIR}/lib/common.sh"
 source "${AWNING_DIR}/lib/docker.sh"
@@ -38,7 +45,7 @@ load_env_file() {
         value="${value#\'}"
 
         case "$key" in
-            HOST_UID|HOST_GID|BITCOIN_ARCH|LND_ARCH|BITCOIN_CORE_VERSION|LND_VERSION|ELECTRS_VERSION|RTL_VERSION|NODE_ALIAS|BITCOIN_RPC_USER|BITCOIN_RPC_PASSWORD|TOR_CONTROL_PASSWORD|RTL_PASSWORD|SCB_REPO|LND_REST_BIND|LND_REST_PORT|ELECTRS_SSL_BIND|ELECTRS_SSL_PORT|RTL_BIND|RTL_PORT)
+            HOST_UID|HOST_GID|BITCOIN_ARCH|LND_ARCH|BITCOIN_CORE_VERSION|LND_VERSION|ELECTRS_VERSION|RTL_VERSION|NODE_ALIAS|BITCOIN_RPC_USER|BITCOIN_RPC_PASSWORD|TOR_CONTROL_PASSWORD|RTL_PASSWORD|SCB_REPO|LND_REST_BIND|LND_REST_PORT|ELECTRS_SSL_BIND|ELECTRS_SSL_PORT|RTL_BIND|RTL_PORT|BITCOIN_MEM_LIMIT|BITCOIN_CPUS|ELECTRS_MEM_LIMIT|ELECTRS_CPUS)
                 export "$key=$value"
                 ;;
         esac
@@ -46,6 +53,82 @@ load_env_file() {
 }
 
 load_env_file
+
+# Validate .env values after loading.
+# Only runs when .env exists (i.e., after setup). Catches common misconfigurations
+# early rather than letting them fail deep in Docker builds or at runtime.
+validate_env() {
+    local env_file="${AWNING_DIR}/.env"
+    [[ -f "$env_file" ]] || return 0
+
+    local errors=0
+
+    # Helper: check that a variable is a positive integer
+    _check_int() {
+        local name="$1" val="$2"
+        if [[ -n "$val" ]] && ! [[ "$val" =~ ^[0-9]+$ ]]; then
+            echo "  .env: ${name}='${val}' is not a valid integer" >&2
+            errors=$((errors + 1))
+        fi
+    }
+
+    # Helper: check port range (1-65535)
+    _check_port() {
+        local name="$1" val="$2"
+        if [[ -n "$val" ]]; then
+            if ! [[ "$val" =~ ^[0-9]+$ ]] || (( val < 1 || val > 65535 )); then
+                echo "  .env: ${name}='${val}' is not a valid port (1-65535)" >&2
+                errors=$((errors + 1))
+            fi
+        fi
+    }
+
+    # UID/GID must be numeric
+    _check_int "HOST_UID" "${HOST_UID:-}"
+    _check_int "HOST_GID" "${HOST_GID:-}"
+
+    # Architecture must be known
+    if [[ -n "${BITCOIN_ARCH:-}" ]] && [[ "$BITCOIN_ARCH" != "x86_64" && "$BITCOIN_ARCH" != "aarch64" ]]; then
+        echo "  .env: BITCOIN_ARCH='${BITCOIN_ARCH}' is not supported (x86_64 or aarch64)" >&2
+        errors=$((errors + 1))
+    fi
+    if [[ -n "${LND_ARCH:-}" ]] && [[ "$LND_ARCH" != "amd64" && "$LND_ARCH" != "arm64" ]]; then
+        echo "  .env: LND_ARCH='${LND_ARCH}' is not supported (amd64 or arm64)" >&2
+        errors=$((errors + 1))
+    fi
+
+    # Versions must not be empty if set
+    local ver_var
+    for ver_var in BITCOIN_CORE_VERSION LND_VERSION ELECTRS_VERSION; do
+        local ver_val="${!ver_var:-}"
+        if [[ -n "$ver_val" ]] && [[ ! "$ver_val" =~ ^[0-9] ]]; then
+            echo "  .env: ${ver_var}='${ver_val}' does not look like a version" >&2
+            errors=$((errors + 1))
+        fi
+    done
+
+    # Ports must be valid
+    _check_port "LND_REST_PORT" "${LND_REST_PORT:-}"
+    _check_port "ELECTRS_SSL_PORT" "${ELECTRS_SSL_PORT:-}"
+    _check_port "RTL_PORT" "${RTL_PORT:-}"
+
+    # Bind addresses must be valid IPv4
+    local bind_var
+    for bind_var in LND_REST_BIND ELECTRS_SSL_BIND RTL_BIND; do
+        local bind_val="${!bind_var:-}"
+        if [[ -n "$bind_val" ]] && ! [[ "$bind_val" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "  .env: ${bind_var}='${bind_val}' is not a valid IPv4 address" >&2
+            errors=$((errors + 1))
+        fi
+    done
+
+    if [[ "$errors" -gt 0 ]]; then
+        echo "  Found ${errors} invalid value(s) in .env. Fix them or rerun: ./awning.sh setup" >&2
+        return 1
+    fi
+}
+
+validate_env
 
 # --- Main ---
 main() {

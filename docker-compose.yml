@@ -29,6 +29,8 @@ services:
       - ALL
     security_opt:
       - no-new-privileges:true
+    mem_limit: 256m
+    cpus: 0.5
     networks:
       - tor_net
       - awning_net
@@ -53,6 +55,8 @@ services:
       - ALL
     security_opt:
       - no-new-privileges:true
+    mem_limit: ${BITCOIN_MEM_LIMIT:-4g}
+    cpus: ${BITCOIN_CPUS:-2.0}
     networks:
       - tor_net
       - awning_net
@@ -81,6 +85,8 @@ services:
       - ALL
     security_opt:
       - no-new-privileges:true
+    mem_limit: 512m
+    cpus: 0.5
     networks:
       - tor_net
       - awning_net
@@ -113,6 +119,8 @@ services:
       - ALL
     security_opt:
       - no-new-privileges:true
+    mem_limit: ${ELECTRS_MEM_LIMIT:-2g}
+    cpus: ${ELECTRS_CPUS:-1.0}
     networks:
       - tor_net
       - awning_net
@@ -146,6 +154,8 @@ services:
       - ALL
     security_opt:
       - no-new-privileges:true
+    mem_limit: 64m
+    cpus: 0.25
     networks:
       - awning_net
     depends_on:
@@ -173,6 +183,8 @@ services:
       - ALL
     security_opt:
       - no-new-privileges:true
+    mem_limit: 256m
+    cpus: 0.5
     networks:
       - awning_net
     depends_on:

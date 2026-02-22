@@ -10,6 +10,9 @@ configs/torrc
 # Build logs
 .build.log
 
+# Runtime lock file
+.lock
+
 # Runtime data
 data/bitcoin/*
 !data/bitcoin/.gitkeep
