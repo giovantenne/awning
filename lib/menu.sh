@@ -377,17 +377,19 @@ menu_wallet() {
         echo -e "  ${BOLD}${WHITE}2)${NC} Channel balance   ${DIM}Lightning balance${NC}"
         echo -e "  ${BOLD}${WHITE}3)${NC} New address       ${DIM}Generate on-chain address${NC}"
         echo -e "  ${BOLD}${WHITE}4)${NC} Zeus connect      ${DIM}Connection URI for Zeus${NC}"
+        echo -e "  ${BOLD}${WHITE}5)${NC} Auto-unlock pass  ${DIM}Show saved LND auto-unlock password${NC}"
         echo -e "  ${BOLD}${WHITE}0)${NC} Back"
         echo ""
 
         local choice
-        read -r -p "$(echo -e "  ${YELLOW}Choose [0-4]:${NC} ")" choice
+        read -r -p "$(echo -e "  ${YELLOW}Choose [0-5]:${NC} ")" choice
 
         case "$choice" in
             1) echo ""; require_wallet && show_wallet_balance_ui; menu_pause ;;
             2) echo ""; require_wallet && show_channel_balance_ui; menu_pause ;;
             3) echo ""; require_wallet && show_new_address_ui; menu_pause ;;
             4) zeus_connect; menu_pause ;;
+            5) echo ""; show_auto_unlock_password_ui; menu_pause ;;
             0|"") return ;;
             *) print_warn "Invalid choice"; sleep 0.5 ;;
         esac
@@ -433,6 +435,31 @@ sync_auto_unlock_password() {
     printf '%s\n' "$p1" > "$password_file"
     chmod 600 "$password_file"
     print_check "Auto-unlock password saved"
+}
+
+show_auto_unlock_password_ui() {
+    local password_file
+    password_file="$(awning_path data/lnd/password.txt)"
+
+    if [[ ! -f "$password_file" ]]; then
+        print_warn "Auto-unlock password file not found"
+        print_info "Run setup or wallet initialization first."
+        return 1
+    fi
+
+    local lnd_password
+    lnd_password="$(head -n 1 "$password_file" 2>/dev/null | tr -d '\r')"
+    if [[ -z "$lnd_password" ]]; then
+        print_warn "Auto-unlock password is empty"
+        print_info "Initialize the wallet to create it."
+        return 1
+    fi
+
+    draw_titled_info_box \
+        "LND auto-unlock password" \
+        " ${ORANGE}${lnd_password}${NC}" \
+        " ${DIM}Saved at: data/lnd/password.txt${NC}" \
+        " ${DIM}LND uses it automatically at startup.${NC}"
 }
 
 show_wallet_balance_ui() {

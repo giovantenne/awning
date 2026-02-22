@@ -67,6 +67,7 @@ run_setup() {
 # Offers an escape hatch ('w') to launch the full interactive wizard.
 run_auto_setup() {
     local ignore_disk_space="${1:-0}"
+    local AUTO_SETUP_MODE=1
     clear
     draw_header "AWNING FIRST SETUP" "Bitcoin + Lightning Node"
 
@@ -77,13 +78,11 @@ run_auto_setup() {
     detect_arch || return 1
     local bitcoin_arch="$DETECTED_BITCOIN_ARCH"
     local lnd_arch="$DETECTED_LND_ARCH"
-    print_info "Architecture: $(uname -m) (auto-detected)"
 
     # --- Auto-detect UID/GID ---
     local host_uid host_gid
     host_uid="$(id -u)"
     host_gid="$(id -g)"
-    print_info "UID/GID: ${host_uid}/${host_gid} (auto-detected)"
 
     # --- Fetch latest versions with spinner ---
     echo ""
@@ -144,16 +143,9 @@ run_auto_setup() {
         "SCB              ${DIM}disabled${NC}"
     echo ""
 
-    # --- Ask RTL password ---
-    echo -e "  ${BOLD}${CYAN}RTL Web Interface${NC}"
-    print_info "Choose a password for the RTL web interface."
+    # --- Auto-generate RTL password (non-interactive) ---
     local rtl_password
-    while true; do
-        rtl_password="$(read_password "RTL password")"
-        if validate_password "$rtl_password" "$MIN_PASSWORD_LENGTH"; then
-            break
-        fi
-    done
+    rtl_password="$(generate_password 16)"
     echo ""
 
     # --- Choice prompt: Enter = auto, w = full wizard ---
@@ -169,7 +161,6 @@ run_auto_setup() {
 
     # --- Write .env ---
     echo ""
-    echo -e "  ${BOLD}${CYAN}Generating configuration...${NC}"
 
     local env_file
     env_file="$(awning_path .env)"
@@ -236,6 +227,7 @@ EOF
     dc_start_services
 
     # --- Initialize wallet via REST API ---
+    print_step "Initialize LND Wallet"
     echo ""
     if ! auto_initialize_wallet; then
         print_warn "Wallet initialization failed. You can retry from the menu."
@@ -243,7 +235,7 @@ EOF
     fi
 
     # --- Show seed screen ---
-    show_seed_screen "$_AUTO_WALLET_PASSWORD"
+    show_seed_screen
 
     # Return 0 so caller shows the dashboard
     return 0
@@ -574,13 +566,11 @@ step_node_config() {
     detect_arch || return 1
     local bitcoin_arch="$DETECTED_BITCOIN_ARCH"
     local lnd_arch="$DETECTED_LND_ARCH"
-    print_info "Architecture: $(uname -m) (auto-detected)"
 
     # Auto-detect UID/GID
     local host_uid host_gid
     host_uid="$(id -u)"
     host_gid="$(id -g)"
-    print_info "UID/GID: ${host_uid}/${host_gid} (auto-detected)"
 
     # Node alias
     local node_alias
@@ -869,7 +859,11 @@ step_rtl_config() {
 # Step 4: Generate configs from templates
 # ============================================================
 step_generate_configs() {
-    print_step "Step 4/7: Generating Configuration"
+    if [[ "${AUTO_SETUP_MODE:-0}" == "1" ]]; then
+        print_step "Generating Configuration"
+    else
+        print_step "Step 4/7: Generating Configuration"
+    fi
 
     # Keep existing credentials on setup rerun to avoid RPC auth mismatches.
     local rpc_user rpc_password tor_password
@@ -1179,9 +1173,6 @@ wait_for_lnd_stable() {
 # Global array to hold the 24-word seed after wallet creation
 _AUTO_SEED_WORDS=()
 
-# Global to pass the generated wallet password to show_seed_screen
-_AUTO_WALLET_PASSWORD=""
-
 # Wait for LND REST API to be in wallet-creation-ready state.
 # Returns: 0 = ready (NON_EXISTING), 1 = timeout, 2 = wallet already exists
 wait_for_lnd_api() {
@@ -1254,7 +1245,6 @@ _wait_for_lnd_api_with_spinner() {
 auto_initialize_wallet() {
     local lnd_password
     lnd_password="$(generate_password 16)"
-    _AUTO_WALLET_PASSWORD="$lnd_password"
     local password_file
     password_file="$(awning_path data/lnd/password.txt)"
     mkdir -p "$(awning_path data/lnd)"
@@ -1377,10 +1367,7 @@ auto_initialize_wallet() {
 
 # Display the 24-word seed in a polished TUI screen.
 # Reads from the global _AUTO_SEED_WORDS array.
-# Args: $1 - wallet password (optional, displayed if provided)
 show_seed_screen() {
-    local wallet_password="${1:-$_AUTO_WALLET_PASSWORD}"
-
     if [[ ${#_AUTO_SEED_WORDS[@]} -ne 24 ]]; then
         print_warn "No seed to display."
         return
@@ -1389,8 +1376,6 @@ show_seed_screen() {
     clear
     draw_header "WALLET CREATED" "Write down your seed"
 
-    echo ""
-    echo -e "  ${BOLD}Your 24-word recovery seed:${NC}"
     echo ""
 
     # Build the 3-column x 8-row grid
@@ -1412,8 +1397,9 @@ show_seed_screen() {
         grid_lines+=("$line")
     done
 
-    # Display inside a box
-    draw_info_box \
+    # Display inside a titled box
+    draw_titled_info_box \
+        "24-word recovery seed" \
         " " \
         "  ${grid_lines[0]}" \
         "  ${grid_lines[1]}" \
@@ -1426,11 +1412,6 @@ show_seed_screen() {
         " "
 
     echo ""
-    if [[ -n "$wallet_password" ]]; then
-        echo -e "  ${BOLD}Wallet auto-unlock password:${NC} ${ORANGE}${wallet_password}${NC}"
-        echo -e "  ${DIM}(also saved in data/lnd/password.txt)${NC}"
-        echo ""
-    fi
     print_warn "${BOLD}IMPORTANT:${NC} Write these words down and store them safely."
     print_warn "They ${BOLD}CANNOT${NC} be shown again. This is your only backup."
     echo ""
@@ -1445,7 +1426,14 @@ show_seed_screen() {
         if [[ "$rtl_bind" == "0.0.0.0" ]]; then
             rtl_host="$lan_ip"
         fi
-        echo -e "  RTL web interface: ${BOLD}http://${rtl_host}:${rtl_port}${NC}"
+        draw_titled_info_box \
+            "RTL web interface" \
+            " " \
+            "URL: ${BOLD}http://${rtl_host}:${rtl_port}${NC}" \
+            "Password: ${ORANGE}${RTL_PASSWORD}${NC}" \
+            " " \
+            "${DIM}Password can be changed from the web interface.${NC}" \
+            " "
         echo ""
     else
         print_info "RTL web interface is disabled."

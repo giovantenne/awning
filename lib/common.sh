@@ -233,6 +233,55 @@ draw_info_box() {
     printf '%b\n' "$BOX_BR"
 }
 
+# Draw a titled info box with multiple lines.
+# Usage: draw_titled_info_box "Title" "line1" "line2"
+draw_titled_info_box() {
+    local title="$1"
+    shift
+    local lines=("$@")
+    local tw
+    tw="$(term_width)"
+    local width=42
+    [[ $tw -lt $((width + 4)) ]] && width=$((tw - 4))
+
+    # Find max line length
+    local max_len=0
+    local line
+    for line in "${lines[@]}"; do
+        local stripped
+        stripped="$(echo -e "$line" | sed 's/\x1b\[[0-9;]*m//g')"
+        [[ ${#stripped} -gt $max_len ]] && max_len=${#stripped}
+    done
+    [[ $max_len -gt $((width - 4)) ]] && width=$((max_len + 4))
+    local inner=$((width - 2))
+
+    # Top border with title
+    printf '  %b%b%b ' "$BOX_TL" "$BOX_H" "$BOX_H"
+    printf '%s ' "$title"
+    local title_used=$(( ${#title} + 4 ))  # ┌── title_
+    local remaining=$((width - title_used))
+    if [[ $remaining -lt 0 ]]; then
+        remaining=0
+    fi
+    draw_line "$remaining"
+    printf '%b\n' "$BOX_TR"
+
+    # Content lines
+    for line in "${lines[@]}"; do
+        local stripped
+        stripped="$(echo -e "$line" | sed 's/\x1b\[[0-9;]*m//g')"
+        local line_len=${#stripped}
+        printf '  %b %b' "$BOX_V" "$line"
+        printf '%*s' "$(( inner - line_len ))" ""
+        printf ' %b\n' "$BOX_V"
+    done
+
+    # Bottom border
+    printf '  %b' "$BOX_BL"
+    draw_line "$width"
+    printf '%b\n' "$BOX_BR"
+}
+
 # ============================================================
 # Logging with icons
 # ============================================================
