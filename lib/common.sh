@@ -12,6 +12,13 @@ RTL_PORT=3000
 BITCOIN_NETWORK="mainnet"
 ADMIN_MACAROON_SUBPATH="data/chain/bitcoin/mainnet/admin.macaroon"
 
+# Timeouts (seconds)
+LND_STABLE_TIMEOUT=90
+LND_API_TIMEOUT=120
+
+# Minimum free disk space for full Bitcoin node (GB)
+REQUIRED_DISK_GB=900
+
 # ============================================================
 # Colors (respects NO_COLOR convention: https://no-color.org/)
 # ============================================================
@@ -90,7 +97,11 @@ _display_width() {
             s="${s/"$t"/}"
             count=$((count + 1))
         done
-        w=$((w + count))
+        local symbol_width=1
+        if [[ "$t" == "⚠" ]]; then
+            symbol_width=2
+        fi
+        w=$((w + (count * symbol_width)))
     done
     echo "$w"
 }
@@ -204,6 +215,55 @@ draw_info_box() {
     # Top border
     printf '  %b' "$BOX_TL"
     draw_line "$width"
+    printf '%b\n' "$BOX_TR"
+
+    # Content lines
+    for line in "${lines[@]}"; do
+        local stripped
+        stripped="$(echo -e "$line" | sed 's/\x1b\[[0-9;]*m//g')"
+        local line_len=${#stripped}
+        printf '  %b %b' "$BOX_V" "$line"
+        printf '%*s' "$(( inner - line_len ))" ""
+        printf ' %b\n' "$BOX_V"
+    done
+
+    # Bottom border
+    printf '  %b' "$BOX_BL"
+    draw_line "$width"
+    printf '%b\n' "$BOX_BR"
+}
+
+# Draw a titled info box with multiple lines.
+# Usage: draw_titled_info_box "Title" "line1" "line2"
+draw_titled_info_box() {
+    local title="$1"
+    shift
+    local lines=("$@")
+    local tw
+    tw="$(term_width)"
+    local width=42
+    [[ $tw -lt $((width + 4)) ]] && width=$((tw - 4))
+
+    # Find max line length
+    local max_len=0
+    local line
+    for line in "${lines[@]}"; do
+        local stripped
+        stripped="$(echo -e "$line" | sed 's/\x1b\[[0-9;]*m//g')"
+        [[ ${#stripped} -gt $max_len ]] && max_len=${#stripped}
+    done
+    [[ $max_len -gt $((width - 4)) ]] && width=$((max_len + 4))
+    local inner=$((width - 2))
+
+    # Top border with title
+    printf '  %b%b%b ' "$BOX_TL" "$BOX_H" "$BOX_H"
+    printf '%s ' "$title"
+    local title_used=$(( ${#title} + 4 ))  # ┌── title_
+    local remaining=$((width - title_used))
+    if [[ $remaining -lt 0 ]]; then
+        remaining=0
+    fi
+    draw_line "$remaining"
     printf '%b\n' "$BOX_TR"
 
     # Content lines
@@ -390,6 +450,45 @@ awning_path() {
 }
 
 # ============================================================
+# Architecture detection
+# ============================================================
+
+# Detect CPU architecture and set BITCOIN_ARCH / LND_ARCH.
+# Output: sets global variables DETECTED_BITCOIN_ARCH and DETECTED_LND_ARCH.
+# Returns: 1 on unsupported architecture.
+detect_arch() {
+    local arch
+    arch="$(uname -m)"
+    case "$arch" in
+        x86_64)  DETECTED_BITCOIN_ARCH="x86_64";  DETECTED_LND_ARCH="amd64" ;;
+        aarch64) DETECTED_BITCOIN_ARCH="aarch64"; DETECTED_LND_ARCH="arm64" ;;
+        *)
+            print_fail "Unsupported architecture: $arch"
+            return 1
+            ;;
+    esac
+}
+
+# ============================================================
+# Version helpers
+# ============================================================
+
+AWNING_VERSION_CACHE=""
+
+get_awning_version() {
+    if [[ -z "$AWNING_VERSION_CACHE" ]]; then
+        local version_file
+        version_file="$(awning_path VERSION)"
+        if [[ -f "$version_file" ]]; then
+            AWNING_VERSION_CACHE="$(cat "$version_file")"
+        else
+            AWNING_VERSION_CACHE="0.0.0"
+        fi
+    fi
+    echo "$AWNING_VERSION_CACHE"
+}
+
+# ============================================================
 # Network helpers
 # ============================================================
 
@@ -472,11 +571,11 @@ get_status_label() {
     done
 
     if [[ "$running" -eq "$total" ]] && [[ "$healthy" -eq "$total" ]]; then
-        echo -e "${GREEN}${ICON_BOLT} All services healthy${NC}"
+        echo -e "${GREEN}All services healthy${NC}"
     elif [[ "$running" -eq "$total" ]] && [[ "$starting" -gt 0 ]]; then
-        echo -e "${YELLOW}${ICON_BOLT} Services starting (${starting})${NC}"
+        echo -e "${YELLOW}Services starting (${starting})${NC}"
     elif [[ "$unhealthy" -gt 0 ]]; then
-        echo -e "${RED}${ICON_WARN} ${unhealthy} service(s) unhealthy${NC}"
+        echo -e "${RED}${unhealthy} service(s) unhealthy${NC}"
     elif [[ "$running" -gt 0 ]]; then
         echo -e "${YELLOW}${running}/${total} services running${NC}"
     else

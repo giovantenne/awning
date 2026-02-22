@@ -4,7 +4,7 @@
 # Only requirement: Docker (with compose plugin)
 
 # --- Setup constants ---
-REQUIRED_DISK_GB=900
+# REQUIRED_DISK_GB is defined in common.sh
 FALLBACK_BITCOIN_VERSION="30.2"
 FALLBACK_LND_VERSION="0.20.1-beta"
 FALLBACK_ELECTRS_VERSION="0.11.0"
@@ -13,12 +13,27 @@ FALLBACK_RTL_VERSION="0.15.8"
 # Update or append a KEY=VALUE pair in a .env file.
 # If the key already exists, its value is replaced in-place.
 # If not, the line is appended.
+# Uses a line-by-line loop instead of sed to avoid escaping pitfalls
+# with special characters in passwords and values.
 # Args: $1=file  $2=key  $3=value
 _env_set() {
     local file="$1" key="$2" value="$3"
-    if grep -q "^${key}=" "$file" 2>/dev/null; then
-        sed -i "s|^${key}=.*|${key}=${value}|" "$file"
-    else
+    local found=0
+    local tmpfile="${file}.tmp.$$"
+
+    if [[ -f "$file" ]]; then
+        while IFS= read -r line || [[ -n "$line" ]]; do
+            if [[ "$line" == "${key}="* ]]; then
+                echo "${key}=${value}"
+                found=1
+            else
+                echo "$line"
+            fi
+        done < "$file" > "$tmpfile"
+        mv "$tmpfile" "$file"
+    fi
+
+    if [[ "$found" -eq 0 ]]; then
         echo "${key}=${value}" >> "$file"
     fi
 }
@@ -52,6 +67,7 @@ run_setup() {
 # Offers an escape hatch ('w') to launch the full interactive wizard.
 run_auto_setup() {
     local ignore_disk_space="${1:-0}"
+    local AUTO_SETUP_MODE=1
     clear
     draw_header "AWNING FIRST SETUP" "Bitcoin + Lightning Node"
 
@@ -59,38 +75,36 @@ run_auto_setup() {
     step_prerequisites "$ignore_disk_space" || return 1
 
     # --- Auto-detect architecture ---
-    local arch
-    arch="$(uname -m)"
-    local bitcoin_arch lnd_arch
-    case "$arch" in
-        x86_64)  bitcoin_arch="x86_64"; lnd_arch="amd64" ;;
-        aarch64) bitcoin_arch="aarch64"; lnd_arch="arm64" ;;
-        *)
-            print_fail "Unsupported architecture: $arch"
-            return 1
-            ;;
-    esac
-    print_info "Architecture: ${arch} (auto-detected)"
+    detect_arch || return 1
+    local bitcoin_arch="$DETECTED_BITCOIN_ARCH"
+    local lnd_arch="$DETECTED_LND_ARCH"
 
     # --- Auto-detect UID/GID ---
     local host_uid host_gid
     host_uid="$(id -u)"
     host_gid="$(id -g)"
-    print_info "UID/GID: ${host_uid}/${host_gid} (auto-detected)"
 
     # --- Fetch latest versions with spinner ---
     echo ""
     echo -e "  ${BOLD}${CYAN}Fetching latest versions...${NC}"
 
     local btc_version lnd_version electrs_version rtl_version
+    local tmp_btc_ver tmp_lnd_ver tmp_electrs_ver tmp_rtl_ver
+    tmp_btc_ver="$(mktemp /tmp/awning_btc_ver.XXXXXX)"
+    tmp_lnd_ver="$(mktemp /tmp/awning_lnd_ver.XXXXXX)"
+    tmp_electrs_ver="$(mktemp /tmp/awning_electrs_ver.XXXXXX)"
+    tmp_rtl_ver="$(mktemp /tmp/awning_rtl_ver.XXXXXX)"
 
-    fetch_latest_github_version "bitcoin/bitcoin" > /tmp/awning_btc_ver 2>/dev/null &
+    # Ensure temp files are cleaned up on exit/error
+    trap 'rm -f "$tmp_btc_ver" "$tmp_lnd_ver" "$tmp_electrs_ver" "$tmp_rtl_ver"; _cleanup_github_cache' EXIT
+
+    fetch_latest_github_version "bitcoin/bitcoin" > "$tmp_btc_ver" 2>/dev/null &
     local pid_btc=$!
-    fetch_latest_github_version "lightningnetwork/lnd" > /tmp/awning_lnd_ver 2>/dev/null &
+    fetch_latest_github_version "lightningnetwork/lnd" > "$tmp_lnd_ver" 2>/dev/null &
     local pid_lnd=$!
-    fetch_latest_github_version "romanz/electrs" > /tmp/awning_electrs_ver 2>/dev/null &
+    fetch_latest_github_version "romanz/electrs" > "$tmp_electrs_ver" 2>/dev/null &
     local pid_electrs=$!
-    fetch_latest_github_version "Ride-The-Lightning/RTL" > /tmp/awning_rtl_ver 2>/dev/null &
+    fetch_latest_github_version "Ride-The-Lightning/RTL" > "$tmp_rtl_ver" 2>/dev/null &
     local pid_rtl=$!
 
     # Wait for all fetches
@@ -99,11 +113,13 @@ run_auto_setup() {
     wait "$pid_electrs" 2>/dev/null || true
     wait "$pid_rtl" 2>/dev/null || true
 
-    btc_version="$(cat /tmp/awning_btc_ver 2>/dev/null)" || true
-    lnd_version="$(cat /tmp/awning_lnd_ver 2>/dev/null)" || true
-    electrs_version="$(cat /tmp/awning_electrs_ver 2>/dev/null)" || true
-    rtl_version="$(cat /tmp/awning_rtl_ver 2>/dev/null)" || true
-    rm -f /tmp/awning_btc_ver /tmp/awning_lnd_ver /tmp/awning_electrs_ver /tmp/awning_rtl_ver
+    btc_version="$(cat "$tmp_btc_ver" 2>/dev/null)" || true
+    lnd_version="$(cat "$tmp_lnd_ver" 2>/dev/null)" || true
+    electrs_version="$(cat "$tmp_electrs_ver" 2>/dev/null)" || true
+    rtl_version="$(cat "$tmp_rtl_ver" 2>/dev/null)" || true
+    rm -f "$tmp_btc_ver" "$tmp_lnd_ver" "$tmp_electrs_ver" "$tmp_rtl_ver"
+    trap - EXIT
+    _cleanup_github_cache
 
     # Fallback to constants if fetch failed
     btc_version="${btc_version:-$FALLBACK_BITCOIN_VERSION}"
@@ -128,16 +144,9 @@ run_auto_setup() {
         "SCB              ${DIM}disabled${NC}"
     echo ""
 
-    # --- Ask RTL password ---
-    echo -e "  ${BOLD}${CYAN}RTL Web Interface${NC}"
-    print_info "Choose a password for the RTL web interface."
+    # --- Auto-generate RTL password (non-interactive) ---
     local rtl_password
-    while true; do
-        rtl_password="$(read_password "RTL password")"
-        if validate_password "$rtl_password" "$MIN_PASSWORD_LENGTH"; then
-            break
-        fi
-    done
+    rtl_password="$(generate_password 16)"
     echo ""
 
     # --- Choice prompt: Enter = auto, w = full wizard ---
@@ -153,7 +162,6 @@ run_auto_setup() {
 
     # --- Write .env ---
     echo ""
-    echo -e "  ${BOLD}${CYAN}Generating configuration...${NC}"
 
     local env_file
     env_file="$(awning_path .env)"
@@ -220,6 +228,7 @@ EOF
     dc_start_services
 
     # --- Initialize wallet via REST API ---
+    print_step "Initialize LND Wallet"
     echo ""
     if ! auto_initialize_wallet; then
         print_warn "Wallet initialization failed. You can retry from the menu."
@@ -238,6 +247,10 @@ EOF
 # ============================================================
 step_prerequisites() {
     local ignore_disk_space="${1:-0}"
+    local can_sudo=0
+    if command -v sudo &>/dev/null && sudo -n true 2>/dev/null; then
+        can_sudo=1
+    fi
     echo ""
     echo -e "  ${BOLD}${CYAN}Checking prerequisites...${NC}"
 
@@ -255,8 +268,9 @@ step_prerequisites() {
     fi
 
     # Docker compose (plugin or standalone)
-    if docker compose version &>/dev/null 2>&1 || sudo docker compose version &>/dev/null 2>&1 || \
-       docker-compose version &>/dev/null 2>&1 || sudo docker-compose version &>/dev/null 2>&1; then
+    if docker compose version &>/dev/null 2>&1 || docker-compose version &>/dev/null 2>&1 || \
+       { [[ "$can_sudo" -eq 1 ]] && sudo -n docker compose version &>/dev/null 2>&1; } || \
+       { [[ "$can_sudo" -eq 1 ]] && sudo -n docker-compose version &>/dev/null 2>&1; }; then
         local compose_ver
         compose_ver="$(docker compose version 2>/dev/null | grep -oP '\d+\.\d+(\.\d+)?' | head -1)" || true
         if [[ -z "$compose_ver" ]]; then
@@ -271,7 +285,7 @@ step_prerequisites() {
     fi
 
     # Docker daemon running
-    if docker info &>/dev/null 2>&1 || sudo docker info &>/dev/null 2>&1; then
+    if docker info &>/dev/null 2>&1 || { [[ "$can_sudo" -eq 1 ]] && sudo -n docker info &>/dev/null 2>&1; }; then
         print_check "Docker daemon running"
     else
         print_fail "Docker daemon is not running"
@@ -280,13 +294,11 @@ step_prerequisites() {
 
     # Disk space check
     # Required free space is reduced by already downloaded blockchain data.
-    local avail_kb avail_gb existing_bitcoin_kb existing_bitcoin_gb required_free_kb required_free_gb
+    local avail_kb avail_gb existing_bitcoin_kb required_free_kb required_free_gb
     avail_kb="$(df --output=avail "$(awning_path .)" 2>/dev/null | tail -1 | tr -d ' ')" || avail_kb=0
     avail_gb="$(echo "$avail_kb" | awk '{printf "%.1f", $1 / 1048576}')"
     existing_bitcoin_kb="$(du -sk "$(awning_path data/bitcoin)" 2>/dev/null | awk '{print $1}')" || existing_bitcoin_kb=0
     existing_bitcoin_kb="${existing_bitcoin_kb:-0}"
-    existing_bitcoin_gb="$(echo "$existing_bitcoin_kb" | awk '{printf "%.1f", $1 / 1048576}')"
-
     required_free_kb=$((REQUIRED_DISK_GB * 1048576 - existing_bitcoin_kb))
     if [[ "$required_free_kb" -lt 0 ]]; then
         required_free_kb=0
@@ -379,8 +391,17 @@ validate_scb_repo() {
     return 0
 }
 
+# Per-session GitHub API response cache (avoids rate limiting).
+# Uses deterministic file paths so the cache works across subshells
+# (command substitution, background jobs in run_auto_setup, etc.).
+# GitHub's unauthenticated limit is 60 req/hour, so we must minimise calls.
+_GITHUB_CACHE_DIR="/tmp/awning_gh_cache.$$"
+
 # Fetch recent release versions from a GitHub repository.
-# Spins up a disposable python:3-slim Docker container to query the API.
+# Uses curl + jq with per-session caching.
+# Versions are normalized (strip leading "v"), deduplicated, and sorted by
+# semantic version descending so "latest" means numerically highest version
+# across all projects (not just first returned by GitHub API).
 # Args:
 #   $1 - GitHub repo (e.g. "bitcoin/bitcoin")
 #   $2 - Number of releases to return (default: 5)
@@ -389,27 +410,33 @@ validate_scb_repo() {
 fetch_github_versions() {
     local repo="$1"
     local limit="${2:-5}"
-    local output=""
+    local cache_key="${repo//\//_}"
+    local cache_file="${_GITHUB_CACHE_DIR}/${cache_key}.json"
 
-    output="$(_docker run --rm -i python:3-slim python3 - "$repo" "$limit" <<'PY'
-import json, sys, urllib.request
-repo = sys.argv[1]
-limit = int(sys.argv[2])
-url = f"https://api.github.com/repos/{repo}/releases?per_page={limit}"
-req = urllib.request.Request(url, headers={"User-Agent": "awning-setup"})
-with urllib.request.urlopen(req, timeout=10) as r:
-    data = json.load(r)
-versions = []
-for rel in data:
-    tag = rel.get("tag_name", "")
-    if tag.startswith("v"):
-        tag = tag[1:]
-    if tag and tag not in versions:
-        versions.append(tag)
-for v in versions:
-    print(v)
-PY
-)" || true
+    # Populate cache if not present
+    if [[ ! -s "$cache_file" ]]; then
+        mkdir -p "$_GITHUB_CACHE_DIR"
+        # Always fetch a generous page so the cache covers both "latest"
+        # and "show recent releases" use-cases.
+        local fetch_limit=$(( limit > 8 ? limit : 8 ))
+        curl -sf --max-time 10 -H "User-Agent: awning-setup" \
+            "https://api.github.com/repos/${repo}/releases?per_page=${fetch_limit}" \
+            > "$cache_file" 2>/dev/null || true
+        # Discard if not a valid JSON array (e.g. rate-limit error message)
+        if ! jq -e 'type == "array"' < "$cache_file" &>/dev/null; then
+            rm -f "$cache_file"
+            return 1
+        fi
+    fi
+
+    local output
+    output="$(
+        jq -r '.[].tag_name' < "$cache_file" \
+        | sed 's/^v//' \
+        | awk 'NF && !seen[$0]++' \
+        | sort -Vr \
+        | head -n "$limit"
+    )" || true
 
     if [[ -z "$output" ]]; then
         return 1
@@ -419,34 +446,15 @@ PY
 }
 
 # Fetch the latest release version for a GitHub repo.
-# Uses the /releases/latest endpoint which returns the release marked as
-# "Latest" on GitHub (ignores older-branch maintenance releases).
-# Falls back to fetch_github_versions limit=1 if the endpoint fails.
+# Reuses the cached /releases response from fetch_github_versions.
 fetch_latest_github_version() {
     local repo="$1"
-    local output=""
-
-    output="$(_docker run --rm -i python:3-slim python3 - "$repo" <<'PY'
-import json, sys, urllib.request
-repo = sys.argv[1]
-url = f"https://api.github.com/repos/{repo}/releases/latest"
-req = urllib.request.Request(url, headers={"User-Agent": "awning-setup"})
-with urllib.request.urlopen(req, timeout=10) as r:
-    data = json.load(r)
-tag = data.get("tag_name", "")
-if tag.startswith("v"):
-    tag = tag[1:]
-print(tag)
-PY
-)" || true
-
-    if [[ -n "$output" ]]; then
-        echo "$output"
-        return 0
-    fi
-
-    # Fallback: pick the first from the general releases list
     fetch_github_versions "$repo" 1 | head -1
+}
+
+# Clean up cached GitHub API responses.
+_cleanup_github_cache() {
+    rm -rf "$_GITHUB_CACHE_DIR" 2>/dev/null || true
 }
 
 # Interactive version selector with latest/custom/list options.
@@ -552,24 +560,14 @@ step_node_config() {
     print_step "Step 1/7: Node Configuration"
 
     # Auto-detect architecture
-    local arch
-    arch="$(uname -m)"
-    local bitcoin_arch lnd_arch
-    case "$arch" in
-        x86_64)  bitcoin_arch="x86_64"; lnd_arch="amd64" ;;
-        aarch64) bitcoin_arch="aarch64"; lnd_arch="arm64" ;;
-        *)
-            print_fail "Unsupported architecture: $arch"
-            return 1
-            ;;
-    esac
-    print_info "Architecture: ${arch} (auto-detected)"
+    detect_arch || return 1
+    local bitcoin_arch="$DETECTED_BITCOIN_ARCH"
+    local lnd_arch="$DETECTED_LND_ARCH"
 
     # Auto-detect UID/GID
     local host_uid host_gid
     host_uid="$(id -u)"
     host_gid="$(id -g)"
-    print_info "UID/GID: ${host_uid}/${host_gid} (auto-detected)"
 
     # Node alias
     local node_alias
@@ -619,6 +617,7 @@ EOF
 
     echo ""
     print_check "Node configuration saved"
+    _cleanup_github_cache
 }
 
 # ============================================================
@@ -754,7 +753,7 @@ step_scb_config() {
                     git -C "$test_dir" add .scb-write-check
                     git -C "$test_dir" -c user.email="awning@backup" -c user.name="Awning SCB" commit -q -m "SCB write check"
                     push_test="$(GIT_SSH_COMMAND="ssh -i ${key_priv} -o UserKnownHostsFile=${scb_ssh_dir}/known_hosts -o StrictHostKeyChecking=yes" \
-                        git -C "$test_dir" push --dry-run origin HEAD:refs/heads/${branch_name} 2>&1)" || true
+                        git -C "$test_dir" push --dry-run origin "HEAD:refs/heads/${branch_name}" 2>&1)" || true
                     rm -rf "$test_dir"
 
                     if echo "$push_test" | grep -qiE "Everything up-to-date|new branch|\\[new branch\\]|To "; then
@@ -858,7 +857,11 @@ step_rtl_config() {
 # Step 4: Generate configs from templates
 # ============================================================
 step_generate_configs() {
-    print_step "Step 4/7: Generating Configuration"
+    if [[ "${AUTO_SETUP_MODE:-0}" == "1" ]]; then
+        print_step "Generating Configuration"
+    else
+        print_step "Step 4/7: Generating Configuration"
+    fi
 
     # Keep existing credentials on setup rerun to avoid RPC auth mismatches.
     local rpc_user rpc_password tor_password
@@ -1038,7 +1041,7 @@ PY
 }
 
 # ============================================================
-# Step 4: Build Docker images
+# Step 5: Build Docker images
 # ============================================================
 step_build_and_start() {
     print_step "Step 5/7: Building Docker Images"
@@ -1058,15 +1061,20 @@ step_build_and_start() {
         return 1
     fi
 
-    # Step 6: Start services
-    print_step "Step 6/7: Starting Services"
+    # Step 6: Recreate services so new images/config/env are applied.
+    print_step "Step 6/7: Restarting Services"
     echo ""
     ensure_lnd_password_file
-    dc_start_services
+    dc_restart >/dev/null 2>&1 &
+    local restart_pid=$!
+    if ! spinner "$restart_pid" "Recreating services with updated configuration..."; then
+        print_fail "Failed to restart services with updated configuration"
+        return 1
+    fi
 }
 
 # ============================================================
-# Step 6: Initialize LND wallet
+# Step 7: Initialize LND wallet
 # ============================================================
 step_initialize_wallet() {
     print_step "Step 7/7: Initialize LND Wallet"
@@ -1143,7 +1151,7 @@ ensure_lnd_password_file() {
 }
 
 wait_for_lnd_stable() {
-    local timeout_s=90
+    local timeout_s="${LND_STABLE_TIMEOUT:-90}"
     local elapsed=0
     local status=""
 
@@ -1171,7 +1179,7 @@ _AUTO_SEED_WORDS=()
 # Wait for LND REST API to be in wallet-creation-ready state.
 # Returns: 0 = ready (NON_EXISTING), 1 = timeout, 2 = wallet already exists
 wait_for_lnd_api() {
-    local timeout_s=120
+    local timeout_s="${LND_API_TIMEOUT:-120}"
     local elapsed=0
 
     while (( elapsed < timeout_s )); do
@@ -1194,12 +1202,52 @@ wait_for_lnd_api() {
     return 1
 }
 
+# Wrapper: runs wait_for_lnd_api under a spinner but handles exit code 2
+# (wallet already exists) without the spinner displaying a false error.
+# Returns: 0 = ready, 1 = timeout, 2 = wallet already exists
+_wait_for_lnd_api_with_spinner() {
+    local status_file
+    status_file="$(mktemp /tmp/awning_lnd_api_status.XXXXXX)"
+    (
+        wait_for_lnd_api
+        echo $? > "$status_file"
+    ) &
+    local wait_pid=$!
+
+    local frames=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
+    local i=0
+    local message="Waiting for LND..."
+    while kill -0 "$wait_pid" 2>/dev/null; do
+        printf "\r  [${CYAN}%s${NC}] %s" "${frames[i++ % ${#frames[@]}]}" "$message"
+        sleep 0.1
+    done
+    wait "$wait_pid" 2>/dev/null || true
+    printf "\r\033[K"
+
+    local api_status=1
+    if [[ -f "$status_file" ]]; then
+        api_status="$(cat "$status_file")"
+        rm -f "$status_file"
+    fi
+
+    if [[ "$api_status" -eq 0 ]]; then
+        print_check "$message"
+    elif [[ "$api_status" -eq 2 ]]; then
+        print_info "Wallet already exists"
+    else
+        print_fail "$message (timed out)"
+    fi
+
+    return "$api_status"
+}
+
 # Initialize LND wallet via REST API (non-interactive).
 # Two-step process: 1) /v1/genseed to generate seed, 2) /v1/initwallet with seed + password.
 # Writes password.txt, captures seed in _AUTO_SEED_WORDS.
 # Returns: 0 = success, 1 = failure
 auto_initialize_wallet() {
-    local lnd_password="ToTheMoon"
+    local lnd_password
+    lnd_password="$(generate_password 16)"
     local password_file
     password_file="$(awning_path data/lnd/password.txt)"
     mkdir -p "$(awning_path data/lnd)"
@@ -1227,17 +1275,15 @@ auto_initialize_wallet() {
     fi
 
     # Wait for LND REST API to be ready for wallet creation
-    wait_for_lnd_api &
-    local wait_pid=$!
     local api_status=0
-    spinner "$wait_pid" "Waiting for LND..." || api_status=$?
+    _wait_for_lnd_api_with_spinner || api_status=$?
 
     if [[ $api_status -eq 2 ]]; then
         print_info "Wallet already exists, skipping creation."
         return 0
     fi
     if [[ $api_status -ne 0 ]]; then
-        print_fail "LND REST API did not become ready within 120 seconds."
+        print_fail "LND REST API did not become ready within ${LND_API_TIMEOUT:-120} seconds."
         print_info "Check logs with: ${CYAN}./awning.sh logs lnd${NC}"
         return 1
     fi
@@ -1255,7 +1301,7 @@ auto_initialize_wallet() {
 
     # Check for error in genseed response
     local genseed_error
-    genseed_error="$(echo "$genseed_response" | dc_exec -T lnd jq -r '.message // empty' 2>/dev/null)" || true
+    genseed_error="$(echo "$genseed_response" | jq -r '.message // empty' 2>/dev/null)" || true
     if [[ -n "$genseed_error" ]]; then
         print_fail "genseed error: ${genseed_error}"
         return 1
@@ -1263,7 +1309,7 @@ auto_initialize_wallet() {
 
     # Extract the seed mnemonic array as JSON for re-use in initwallet
     local seed_array
-    seed_array="$(echo "$genseed_response" | dc_exec -T lnd jq -c '.cipher_seed_mnemonic' 2>/dev/null)" || true
+    seed_array="$(echo "$genseed_response" | jq -c '.cipher_seed_mnemonic' 2>/dev/null)" || true
     if [[ -z "$seed_array" || "$seed_array" == "null" ]]; then
         print_fail "Could not extract seed from genseed response."
         return 1
@@ -1277,9 +1323,8 @@ auto_initialize_wallet() {
     init_payload="{\"wallet_password\":\"${password_b64}\",\"cipher_seed_mnemonic\":${seed_array}}"
 
     local init_response
-    init_response="$(dc_exec -T lnd sh -c \
-        "curl -s --cacert /data/.lnd/tls.cert https://localhost:8080/v1/initwallet \
-         -d '${init_payload}'" \
+    init_response="$(echo "$init_payload" | dc_exec -T lnd sh -c \
+        'curl -s --cacert /data/.lnd/tls.cert https://localhost:8080/v1/initwallet -d @-' \
     )" || true
 
     if [[ -z "$init_response" ]]; then
@@ -1289,7 +1334,7 @@ auto_initialize_wallet() {
 
     # Check for error in initwallet response
     local init_error
-    init_error="$(echo "$init_response" | dc_exec -T lnd jq -r '.message // empty' 2>/dev/null)" || true
+    init_error="$(echo "$init_response" | jq -r '.message // empty' 2>/dev/null)" || true
     if [[ -n "$init_error" ]]; then
         print_fail "initwallet error: ${init_error}"
         return 1
@@ -1297,7 +1342,7 @@ auto_initialize_wallet() {
 
     # Extract seed words from the genseed response for display
     local seed_words_raw
-    seed_words_raw="$(echo "$genseed_response" | dc_exec -T lnd jq -r '.cipher_seed_mnemonic[]' 2>/dev/null)" || true
+    seed_words_raw="$(echo "$genseed_response" | jq -r '.cipher_seed_mnemonic[]' 2>/dev/null)" || true
 
     if [[ -z "$seed_words_raw" ]]; then
         print_fail "Could not extract seed words for display."
@@ -1335,8 +1380,6 @@ show_seed_screen() {
     draw_header "WALLET CREATED" "Write down your seed"
 
     echo ""
-    echo -e "  ${BOLD}Your 24-word recovery seed:${NC}"
-    echo ""
 
     # Build the 3-column x 8-row grid
     local grid_lines=()
@@ -1357,8 +1400,9 @@ show_seed_screen() {
         grid_lines+=("$line")
     done
 
-    # Display inside a box
-    draw_info_box \
+    # Display inside a titled box
+    draw_titled_info_box \
+        "24-word recovery seed" \
         " " \
         "  ${grid_lines[0]}" \
         "  ${grid_lines[1]}" \
@@ -1375,11 +1419,29 @@ show_seed_screen() {
     print_warn "They ${BOLD}CANNOT${NC} be shown again. This is your only backup."
     echo ""
 
-    # Show RTL URL
-    local lan_ip
-    lan_ip="$(get_lan_ip)"
-    echo -e "  RTL web interface: ${BOLD}http://${lan_ip}:3000${NC}"
-    echo ""
+    # Show RTL URL only when enabled, honoring configured bind/port.
+    if [[ -n "${RTL_PASSWORD:-}" ]]; then
+        local lan_ip rtl_bind rtl_port rtl_host
+        lan_ip="$(get_lan_ip)"
+        rtl_bind="${RTL_BIND:-127.0.0.1}"
+        rtl_port="${RTL_PORT:-3000}"
+        rtl_host="$rtl_bind"
+        if [[ "$rtl_bind" == "0.0.0.0" ]]; then
+            rtl_host="$lan_ip"
+        fi
+        draw_titled_info_box \
+            "RTL web interface" \
+            " " \
+            "URL: ${BOLD}http://${rtl_host}:${rtl_port}${NC}" \
+            "Password: ${ORANGE}${RTL_PASSWORD}${NC}" \
+            " " \
+            "${DIM}Password can be changed from the web interface.${NC}" \
+            " "
+        echo ""
+    else
+        print_info "RTL web interface is disabled."
+        echo ""
+    fi
     print_info "To change settings or enable SCB backups, use:"
     print_info "Menu > Tools > Setup wizard"
     echo ""

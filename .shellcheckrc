@@ -1,0 +1,9 @@
+# Awning shellcheck configuration
+# Target shell: bash
+shell=bash
+
+# Allow sourcing files from non-constant paths (we use ${AWNING_DIR}/lib/...)
+disable=SC1091
+
+# Allow usages of 'local' with assignments from subshells (safe in bash)
+disable=SC2155

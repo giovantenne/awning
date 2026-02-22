@@ -7,7 +7,7 @@
 # ============================================================
 
 # Core services in dependency order (always started)
-CORE_SERVICES=(tor bitcoin lnd electrs nginx)
+CORE_SERVICES=(tor bitcoin lnd electrs)
 
 # All services including optional ones
 # SCB is only included when SCB_REPO is configured
@@ -71,6 +71,11 @@ _detect_compose_cmd() {
 _dc() {
     local compose_file
     compose_file="$(awning_path docker-compose.yml)"
+    # Refresh exported vars from .env on each compose call, so runtime changes
+    # made by setup/manual edits are picked up without restarting awning.sh.
+    if declare -F load_env_file >/dev/null 2>&1; then
+        load_env_file
+    fi
     if ! _detect_compose_cmd; then
         print_fail "Neither 'docker compose' nor 'docker-compose' is available"
         return 127
@@ -101,6 +106,15 @@ _docker() {
 }
 
 # ============================================================
+# jq wrapper: native if available, Docker fallback otherwise
+# ============================================================
+if ! command -v jq &>/dev/null; then
+    jq() {
+        _docker run --rm -i ghcr.io/jqlang/jq "$@"
+    }
+fi
+
+# ============================================================
 # Compose wrappers
 # ============================================================
 
@@ -125,7 +139,7 @@ dc_down_with_spinner() {
 }
 
 dc_restart() {
-    _dc restart "$@"
+    _dc up -d --force-recreate --no-build "$@"
 
     if _should_refresh_lnd_after_tor_change "restart" "$@"; then
         print_info "Tor was restarted, restarting lnd to refresh Tor SOCKS endpoint..."
@@ -230,6 +244,7 @@ dc_build_services() {
             done
             echo -e "  ${DIM}--- Full log: .build.log ---${NC}"
             echo ""
+            rm -f "$build_log"
             return 1
         fi
     done

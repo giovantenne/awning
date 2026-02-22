@@ -7,7 +7,7 @@ show_menu() {
     render_main_menu() {
         local status_label="$1"
         clear 2>/dev/null || true
-        draw_header "AWNING v2.0" "${status_label}"
+        draw_header "AWNING v$(get_awning_version)" "${status_label}"
         echo ""
         echo -e "  ${BOLD}${WHITE}1)${NC} Status        ${DIM}Dashboard with sync progress${NC}"
         echo -e "  ${BOLD}${WHITE}2)${NC} Logs          ${DIM}View service logs${NC}"
@@ -17,6 +17,33 @@ show_menu() {
         echo -e "  ${BOLD}${WHITE}6)${NC} System        ${DIM}Start, stop, restart, rebuild${NC}"
         echo -e "  ${BOLD}${WHITE}0)${NC} Exit"
         echo ""
+    }
+
+    # Update only the subtitle row (row 3 inside the header box) without
+    # clearing the screen, eliminating visible flicker on status changes.
+    _update_subtitle() {
+        local new_label="$1"
+        local tw
+        tw="$(term_width)"
+        local width=39
+        [[ $tw -lt $((width + 4)) ]] && width=$((tw - 4))
+
+        local subtitle_visible
+        subtitle_visible="$(echo -e "$new_label" | sed 's/\x1b\[[0-9;]*[A-Za-z]//g')"
+        local subtitle_len
+        subtitle_len="$(_display_width "$subtitle_visible")"
+        local sub_padding=$(( (width - subtitle_len) / 2 ))
+        (( sub_padding < 0 )) && sub_padding=0
+
+        # Save cursor, move to row 4 col 1 (subtitle row), overwrite, restore cursor
+        printf '\033[s'
+        tput cup 3 0 2>/dev/null || printf '\033[4;1H'
+        printf '  %b' "$BOX_V"
+        printf '%*s' "$sub_padding" ""
+        printf '%b' "${new_label}"
+        printf '%*s' "$(( width - sub_padding - subtitle_len ))" ""
+        printf '%b' "$BOX_V"
+        printf '\033[u'
     }
 
     refresh_main_menu() {
@@ -40,7 +67,7 @@ show_menu() {
             fi
 
             ticks=$((ticks + 1))
-            if (( ticks < 10 )); then
+            if (( ticks < 3 )); then
                 continue
             fi
             ticks=0
@@ -49,8 +76,7 @@ show_menu() {
             next_status_label="$(get_status_label 2>/dev/null)" || next_status_label="${DIM}unknown${NC}"
             if [[ "$next_status_label" != "$status_label" ]]; then
                 status_label="$next_status_label"
-                render_main_menu "$status_label"
-                printf "  %b" "$prompt"
+                _update_subtitle "$status_label"
             fi
         done
 
@@ -97,14 +123,13 @@ menu_logs() {
     echo -e "  ${BOLD}${WHITE}3)${NC} LND"
     echo -e "  ${BOLD}${WHITE}4)${NC} Electrs"
     echo -e "  ${BOLD}${WHITE}5)${NC} Tor"
-    echo -e "  ${BOLD}${WHITE}6)${NC} Nginx"
-    echo -e "  ${BOLD}${WHITE}7)${NC} SCB"
-    echo -e "  ${BOLD}${WHITE}8)${NC} RTL"
+    echo -e "  ${BOLD}${WHITE}6)${NC} SCB"
+    echo -e "  ${BOLD}${WHITE}7)${NC} RTL"
     echo -e "  ${BOLD}${WHITE}0)${NC} Back"
     echo ""
 
     local choice
-    read -r -p "$(echo -e "  ${YELLOW}Service [0-8]:${NC} ")" choice
+    read -r -p "$(echo -e "  ${YELLOW}Service [0-7]:${NC} ")" choice
 
     local service=""
     case "$choice" in
@@ -113,9 +138,8 @@ menu_logs() {
         3) service="lnd" ;;
         4) service="electrs" ;;
         5) service="tor" ;;
-        6) service="nginx" ;;
-        7) service="scb" ;;
-        8) service="rtl" ;;
+        6) service="scb" ;;
+        7) service="rtl" ;;
         0|"") return ;;
         *) return ;;
     esac
@@ -191,7 +215,7 @@ menu_system() {
     echo ""
     echo -e "  ${BOLD}${WHITE}1)${NC} Start          ${DIM}Start all services${NC}"
     echo -e "  ${BOLD}${WHITE}2)${NC} Stop           ${DIM}Stop all services${NC}"
-    echo -e "  ${BOLD}${WHITE}3)${NC} Restart        ${DIM}Restart all services${NC}"
+    echo -e "  ${BOLD}${WHITE}3)${NC} Restart        ${DIM}Recreate services (reload .env)${NC}"
     echo -e "  ${BOLD}${WHITE}4)${NC} Rebuild        ${DIM}Rebuild and restart${NC}"
     echo -e "  ${BOLD}${WHITE}0)${NC} Back"
     echo ""
@@ -315,7 +339,10 @@ menu_update_awning() {
         echo ""
         print_check "Rebuild complete"
     fi
-    menu_pause
+    echo ""
+    print_warn "Awning has been updated. Please restart Awning to load the new version."
+    read -r -p "$(echo -e "  ${DIM}Press Enter to exit...${NC}")" _
+    exit 0
 }
 
 # --- Update (rebuild) ---
@@ -353,17 +380,19 @@ menu_wallet() {
         echo -e "  ${BOLD}${WHITE}2)${NC} Channel balance   ${DIM}Lightning balance${NC}"
         echo -e "  ${BOLD}${WHITE}3)${NC} New address       ${DIM}Generate on-chain address${NC}"
         echo -e "  ${BOLD}${WHITE}4)${NC} Zeus connect      ${DIM}Connection URI for Zeus${NC}"
+        echo -e "  ${BOLD}${WHITE}5)${NC} Auto-unlock pass  ${DIM}Show saved LND auto-unlock password${NC}"
         echo -e "  ${BOLD}${WHITE}0)${NC} Back"
         echo ""
 
         local choice
-        read -r -p "$(echo -e "  ${YELLOW}Choose [0-4]:${NC} ")" choice
+        read -r -p "$(echo -e "  ${YELLOW}Choose [0-5]:${NC} ")" choice
 
         case "$choice" in
             1) echo ""; require_wallet && show_wallet_balance_ui; menu_pause ;;
             2) echo ""; require_wallet && show_channel_balance_ui; menu_pause ;;
             3) echo ""; require_wallet && show_new_address_ui; menu_pause ;;
             4) zeus_connect; menu_pause ;;
+            5) echo ""; show_auto_unlock_password_ui; menu_pause ;;
             0|"") return ;;
             *) print_warn "Invalid choice"; sleep 0.5 ;;
         esac
@@ -409,6 +438,31 @@ sync_auto_unlock_password() {
     printf '%s\n' "$p1" > "$password_file"
     chmod 600 "$password_file"
     print_check "Auto-unlock password saved"
+}
+
+show_auto_unlock_password_ui() {
+    local password_file
+    password_file="$(awning_path data/lnd/password.txt)"
+
+    if [[ ! -f "$password_file" ]]; then
+        print_warn "Auto-unlock password file not found"
+        print_info "Run setup or wallet initialization first."
+        return 1
+    fi
+
+    local lnd_password
+    lnd_password="$(head -n 1 "$password_file" 2>/dev/null | tr -d '\r')"
+    if [[ -z "$lnd_password" ]]; then
+        print_warn "Auto-unlock password is empty"
+        print_info "Initialize the wallet to create it."
+        return 1
+    fi
+
+    draw_titled_info_box \
+        "LND auto-unlock password" \
+        " ${ORANGE}${lnd_password}${NC}" \
+        " ${DIM}Saved at: data/lnd/password.txt${NC}" \
+        " ${DIM}LND uses it automatically at startup.${NC}"
 }
 
 show_wallet_balance_ui() {
@@ -619,11 +673,13 @@ menu_bitcoin_cli() {
 
     while true; do
         local cmd
+        local -a cmd_args
         read -r -p "$(echo -e "  ${YELLOW}bitcoin-cli>${NC} ")" cmd || break
         [[ "$cmd" == "exit" || "$cmd" == "quit" ]] && break
         [[ -z "$cmd" ]] && continue
-        # shellcheck disable=SC2086
-        _dc exec -T bitcoin bitcoin-cli -datadir=/data/.bitcoin $cmd 2>/dev/null || true
+        read -r -a cmd_args <<< "$cmd"
+        [[ ${#cmd_args[@]} -eq 0 ]] && continue
+        _dc exec -T bitcoin bitcoin-cli -datadir=/data/.bitcoin "${cmd_args[@]}" 2>/dev/null || true
     done
 }
 
@@ -642,10 +698,12 @@ menu_lncli() {
 
     while true; do
         local cmd
+        local -a cmd_args
         read -r -p "$(echo -e "  ${YELLOW}lncli>${NC} ")" cmd || break
         [[ "$cmd" == "exit" || "$cmd" == "quit" ]] && break
         [[ -z "$cmd" ]] && continue
-        # shellcheck disable=SC2086
-        _dc exec -T lnd lncli --network "${BITCOIN_NETWORK}" $cmd 2>/dev/null || true
+        read -r -a cmd_args <<< "$cmd"
+        [[ ${#cmd_args[@]} -eq 0 ]] && continue
+        _dc exec -T lnd lncli --network "${BITCOIN_NETWORK}" "${cmd_args[@]}" 2>/dev/null || true
     done
 }
