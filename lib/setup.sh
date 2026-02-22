@@ -1061,11 +1061,11 @@ step_build_and_start() {
         return 1
     fi
 
-    # Step 6: Start services
-    print_step "Step 6/7: Starting Services"
+    # Step 6: Recreate services so new images/config/env are applied.
+    print_step "Step 6/7: Restarting Services"
     echo ""
     ensure_lnd_password_file
-    dc_start_services
+    dc_restart
 }
 
 # ============================================================

@@ -215,7 +215,7 @@ menu_system() {
     echo ""
     echo -e "  ${BOLD}${WHITE}1)${NC} Start          ${DIM}Start all services${NC}"
     echo -e "  ${BOLD}${WHITE}2)${NC} Stop           ${DIM}Stop all services${NC}"
-    echo -e "  ${BOLD}${WHITE}3)${NC} Restart        ${DIM}Restart all services${NC}"
+    echo -e "  ${BOLD}${WHITE}3)${NC} Restart        ${DIM}Recreate services (reload .env)${NC}"
     echo -e "  ${BOLD}${WHITE}4)${NC} Rebuild        ${DIM}Rebuild and restart${NC}"
     echo -e "  ${BOLD}${WHITE}0)${NC} Back"
     echo ""
