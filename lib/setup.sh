@@ -96,7 +96,7 @@ run_auto_setup() {
     tmp_rtl_ver="$(mktemp /tmp/awning_rtl_ver.XXXXXX)"
 
     # Ensure temp files are cleaned up on exit/error
-    trap 'rm -f "$tmp_btc_ver" "$tmp_lnd_ver" "$tmp_electrs_ver" "$tmp_rtl_ver"' EXIT
+    trap 'rm -f "$tmp_btc_ver" "$tmp_lnd_ver" "$tmp_electrs_ver" "$tmp_rtl_ver"; _cleanup_github_cache' EXIT
 
     fetch_latest_github_version "bitcoin/bitcoin" > "$tmp_btc_ver" 2>/dev/null &
     local pid_btc=$!
@@ -119,6 +119,7 @@ run_auto_setup() {
     rtl_version="$(cat "$tmp_rtl_ver" 2>/dev/null)" || true
     rm -f "$tmp_btc_ver" "$tmp_lnd_ver" "$tmp_electrs_ver" "$tmp_rtl_ver"
     trap - EXIT
+    _cleanup_github_cache
 
     # Fallback to constants if fetch failed
     btc_version="${btc_version:-$FALLBACK_BITCOIN_VERSION}"
@@ -390,8 +391,17 @@ validate_scb_repo() {
     return 0
 }
 
+# Per-session GitHub API response cache (avoids rate limiting).
+# Uses deterministic file paths so the cache works across subshells
+# (command substitution, background jobs in run_auto_setup, etc.).
+# GitHub's unauthenticated limit is 60 req/hour, so we must minimise calls.
+_GITHUB_CACHE_DIR="/tmp/awning_gh_cache.$$"
+
 # Fetch recent release versions from a GitHub repository.
-# Spins up a disposable python:3-slim Docker container to query the API.
+# Uses curl + jq (with Docker fallback for jq if not installed on host).
+# Responses are cached per repo for the lifetime of the process so that
+# fetch_latest_github_version + fetch_github_versions for the same repo
+# only hit the API once.
 # Args:
 #   $1 - GitHub repo (e.g. "bitcoin/bitcoin")
 #   $2 - Number of releases to return (default: 5)
@@ -400,27 +410,27 @@ validate_scb_repo() {
 fetch_github_versions() {
     local repo="$1"
     local limit="${2:-5}"
-    local output=""
+    local cache_key="${repo//\//_}"
+    local cache_file="${_GITHUB_CACHE_DIR}/${cache_key}.json"
 
-    output="$(_docker run --rm -i python:3-slim python3 - "$repo" "$limit" <<'PY'
-import json, sys, urllib.request
-repo = sys.argv[1]
-limit = int(sys.argv[2])
-url = f"https://api.github.com/repos/{repo}/releases?per_page={limit}"
-req = urllib.request.Request(url, headers={"User-Agent": "awning-setup"})
-with urllib.request.urlopen(req, timeout=10) as r:
-    data = json.load(r)
-versions = []
-for rel in data:
-    tag = rel.get("tag_name", "")
-    if tag.startswith("v"):
-        tag = tag[1:]
-    if tag and tag not in versions:
-        versions.append(tag)
-for v in versions:
-    print(v)
-PY
-)" || true
+    # Populate cache if not present
+    if [[ ! -s "$cache_file" ]]; then
+        mkdir -p "$_GITHUB_CACHE_DIR"
+        # Always fetch a generous page so the cache covers both "latest"
+        # and "show recent releases" use-cases.
+        local fetch_limit=$(( limit > 8 ? limit : 8 ))
+        curl -sf --max-time 10 -H "User-Agent: awning-setup" \
+            "https://api.github.com/repos/${repo}/releases?per_page=${fetch_limit}" \
+            > "$cache_file" 2>/dev/null || true
+        # Discard if not a valid JSON array (e.g. rate-limit error message)
+        if ! jq -e 'type == "array"' < "$cache_file" &>/dev/null; then
+            rm -f "$cache_file"
+            return 1
+        fi
+    fi
+
+    local output
+    output="$(jq -r ".[0:${limit}] | .[].tag_name" < "$cache_file" | sed 's/^v//')" || true
 
     if [[ -z "$output" ]]; then
         return 1
@@ -430,34 +440,15 @@ PY
 }
 
 # Fetch the latest release version for a GitHub repo.
-# Uses the /releases/latest endpoint which returns the release marked as
-# "Latest" on GitHub (ignores older-branch maintenance releases).
-# Falls back to fetch_github_versions limit=1 if the endpoint fails.
+# Reuses the cached /releases response from fetch_github_versions.
 fetch_latest_github_version() {
     local repo="$1"
-    local output=""
-
-    output="$(_docker run --rm -i python:3-slim python3 - "$repo" <<'PY'
-import json, sys, urllib.request
-repo = sys.argv[1]
-url = f"https://api.github.com/repos/{repo}/releases/latest"
-req = urllib.request.Request(url, headers={"User-Agent": "awning-setup"})
-with urllib.request.urlopen(req, timeout=10) as r:
-    data = json.load(r)
-tag = data.get("tag_name", "")
-if tag.startswith("v"):
-    tag = tag[1:]
-print(tag)
-PY
-)" || true
-
-    if [[ -n "$output" ]]; then
-        echo "$output"
-        return 0
-    fi
-
-    # Fallback: pick the first from the general releases list
     fetch_github_versions "$repo" 1 | head -1
+}
+
+# Clean up cached GitHub API responses.
+_cleanup_github_cache() {
+    rm -rf "$_GITHUB_CACHE_DIR" 2>/dev/null || true
 }
 
 # Interactive version selector with latest/custom/list options.
@@ -620,6 +611,7 @@ EOF
 
     echo ""
     print_check "Node configuration saved"
+    _cleanup_github_cache
 }
 
 # ============================================================
