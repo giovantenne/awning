@@ -97,14 +97,13 @@ menu_logs() {
     echo -e "  ${BOLD}${WHITE}3)${NC} LND"
     echo -e "  ${BOLD}${WHITE}4)${NC} Electrs"
     echo -e "  ${BOLD}${WHITE}5)${NC} Tor"
-    echo -e "  ${BOLD}${WHITE}6)${NC} Nginx"
-    echo -e "  ${BOLD}${WHITE}7)${NC} SCB"
-    echo -e "  ${BOLD}${WHITE}8)${NC} RTL"
+    echo -e "  ${BOLD}${WHITE}6)${NC} SCB"
+    echo -e "  ${BOLD}${WHITE}7)${NC} RTL"
     echo -e "  ${BOLD}${WHITE}0)${NC} Back"
     echo ""
 
     local choice
-    read -r -p "$(echo -e "  ${YELLOW}Service [0-8]:${NC} ")" choice
+    read -r -p "$(echo -e "  ${YELLOW}Service [0-7]:${NC} ")" choice
 
     local service=""
     case "$choice" in
@@ -113,9 +112,8 @@ menu_logs() {
         3) service="lnd" ;;
         4) service="electrs" ;;
         5) service="tor" ;;
-        6) service="nginx" ;;
-        7) service="scb" ;;
-        8) service="rtl" ;;
+        6) service="scb" ;;
+        7) service="rtl" ;;
         0|"") return ;;
         *) return ;;
     esac

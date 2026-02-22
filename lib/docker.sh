@@ -7,7 +7,7 @@
 # ============================================================
 
 # Core services in dependency order (always started)
-CORE_SERVICES=(tor bitcoin lnd electrs nginx)
+CORE_SERVICES=(tor bitcoin lnd electrs)
 
 # All services including optional ones
 # SCB is only included when SCB_REPO is configured

@@ -298,28 +298,43 @@ show_connections() {
     fi
 
     echo -e "  ${BOLD}Local Network${NC}"
-    local local_ip lnd_bind lnd_port electrs_bind electrs_port lnd_host electrs_host
+    local local_ip lnd_bind lnd_port electrs_bind electrs_port
+    local has_lan_service=false
     local_ip="$(get_lan_ip)"
     lnd_bind="${LND_REST_BIND:-127.0.0.1}"
     lnd_port="${LND_REST_PORT:-8080}"
     electrs_bind="${ELECTRS_SSL_BIND:-127.0.0.1}"
     electrs_port="${ELECTRS_SSL_PORT:-50002}"
-    lnd_host="${lnd_bind}"
-    electrs_host="${electrs_bind}"
-    [[ "$lnd_bind" == "0.0.0.0" ]] && lnd_host="$local_ip"
-    [[ "$electrs_bind" == "0.0.0.0" ]] && electrs_host="$local_ip"
 
-    echo -e "    LND REST (TLS):  ${WHITE}${UNDERLINE}https://${lnd_host}:${lnd_port}${NC}"
-    echo -e "    Electrs (SSL):   ${WHITE}${UNDERLINE}${electrs_host}:${electrs_port}${NC}"
+    if [[ "$lnd_bind" != "127.0.0.1" ]]; then
+        local lnd_host="${lnd_bind}"
+        [[ "$lnd_bind" == "0.0.0.0" ]] && lnd_host="$local_ip"
+        echo -e "    LND REST (TLS):  ${WHITE}${UNDERLINE}https://${lnd_host}:${lnd_port}${NC}"
+        has_lan_service=true
+    fi
 
-    # RTL local URL (only when enabled)
+    if [[ "$electrs_bind" != "127.0.0.1" ]]; then
+        local electrs_host="${electrs_bind}"
+        [[ "$electrs_bind" == "0.0.0.0" ]] && electrs_host="$local_ip"
+        echo -e "    Electrs (SSL):   ${WHITE}${UNDERLINE}${electrs_host}:${electrs_port}${NC}"
+        has_lan_service=true
+    fi
+
+    # RTL local URL (only when enabled and not localhost-only)
     if [[ -n "${RTL_PASSWORD:-}" ]]; then
-        local rtl_bind rtl_port rtl_host
+        local rtl_bind rtl_port
         rtl_bind="${RTL_BIND:-127.0.0.1}"
         rtl_port="${RTL_PORT:-3000}"
-        rtl_host="${rtl_bind}"
-        [[ "$rtl_bind" == "0.0.0.0" ]] && rtl_host="$local_ip"
-        echo -e "    RTL Web UI:      ${WHITE}${UNDERLINE}http://${rtl_host}:${rtl_port}${NC}"
+        if [[ "$rtl_bind" != "127.0.0.1" ]]; then
+            local rtl_host="${rtl_bind}"
+            [[ "$rtl_bind" == "0.0.0.0" ]] && rtl_host="$local_ip"
+            echo -e "    RTL Web UI:      ${WHITE}${UNDERLINE}http://${rtl_host}:${rtl_port}${NC}"
+            has_lan_service=true
+        fi
+    fi
+
+    if [[ "$has_lan_service" == false ]]; then
+        print_info "No services exposed on local network (all bound to localhost)"
     fi
 
     echo ""

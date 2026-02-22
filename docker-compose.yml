@@ -93,30 +93,17 @@ services:
     depends_on:
       bitcoin:
         condition: service_healthy
+    ports:
+      - "${ELECTRS_SSL_BIND:-127.0.0.1}:${ELECTRS_SSL_PORT:-50002}:50002"  # Electrs SSL (stunnel)
     volumes:
       - ./configs/electrs.toml:/data/electrs.toml:ro
       - ./data/electrs:/data/electrs_db
     healthcheck:
-      test: ["CMD", "nc", "-z", "localhost", "50001"]
+      test: ["CMD", "sh", "-c", "nc -z localhost 50001 && nc -z localhost 50002"]
       interval: 60s
       timeout: 10s
       start_period: 30s
       retries: 3
-
-  # --- Nginx SSL reverse proxy ---
-  nginx:
-    build:
-      context: ./dockerfiles
-      dockerfile: Dockerfile.nginx
-    container_name: nginx
-    restart: unless-stopped
-    networks:
-      - awning_net
-    depends_on:
-      electrs:
-        condition: service_started
-    ports:
-      - "${ELECTRS_SSL_BIND:-127.0.0.1}:${ELECTRS_SSL_PORT:-50002}:50002"  # Electrs SSL
 
   # --- Static Channel Backup ---
   scb:

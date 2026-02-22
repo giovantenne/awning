@@ -19,7 +19,6 @@ Read the full disclaimer before use: [DISCLAIMER.md](DISCLAIMER.md)
 | [LND](https://github.com/lightningnetwork/lnd) | Lightning node |
 | [Electrs](https://github.com/romanz/electrs) | Electrum server (Rust implementation) |
 | [Tor](https://www.torproject.org/) | SOCKS proxy + hidden services |
-| [Nginx](https://github.com/nginx) | SSL termination for Electrs |
 | [RTL](https://github.com/Ride-The-Lightning/RTL) | Web UI for LND |
 | [SCB watcher](https://github.com/lightningnetwork/lnd/blob/master/docs/recovery.md) | Auto backup of `channel.backup` to Git repository |
 
