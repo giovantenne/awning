@@ -7,7 +7,7 @@ show_menu() {
     render_main_menu() {
         local status_label="$1"
         clear 2>/dev/null || true
-        draw_header "AWNING v2.0" "${status_label}"
+        draw_header "AWNING v$(get_awning_version)" "${status_label}"
         echo ""
         echo -e "  ${BOLD}${WHITE}1)${NC} Status        ${DIM}Dashboard with sync progress${NC}"
         echo -e "  ${BOLD}${WHITE}2)${NC} Logs          ${DIM}View service logs${NC}"

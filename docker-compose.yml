@@ -99,7 +99,7 @@ services:
       - ./configs/electrs.toml:/data/electrs.toml:ro
       - ./data/electrs:/data/electrs_db
     healthcheck:
-      test: ["CMD", "sh", "-c", "nc -z localhost 50001 && nc -z localhost 50002"]
+      test: ["CMD-SHELL", "/bin/nc -4 -z 127.0.0.1 50001 && /bin/nc -4 -z 127.0.0.1 50002"]
       interval: 60s
       timeout: 10s
       start_period: 30s

@@ -4,7 +4,7 @@
 
 # Show status dashboard
 show_status() {
-    draw_header "AWNING STATUS" "Service Dashboard"
+    draw_header "AWNING v$(get_awning_version)" "Service Dashboard"
     echo ""
 
     # Service status table
@@ -41,6 +41,10 @@ show_status() {
         # Show sync progress on the bitcoin row
         if [[ "$service" == "bitcoin" && -n "$bitcoin_sync_detail" ]]; then
             detail="$bitcoin_sync_detail"
+        fi
+
+        if [[ "$service" == "electrs" && -n "$bitcoin_sync_detail" ]]; then
+            detail="waiting for bitcoin sync"
         fi
 
         if [[ -z "$status" ]]; then
@@ -183,13 +187,14 @@ show_electrs_status() {
     health="$(dc_get_health electrs)"
     [[ -z "$health" ]] && health="unknown"
 
-    local logs last_chain_line last_index_line electrs_height electrs_tip index_range
+    local logs last_chain_line last_index_line last_ibd_line electrs_height electrs_tip index_range
     logs="$(_docker logs --tail 200 electrs 2>/dev/null)" || logs=""
     if [[ -z "$logs" ]]; then
         logs="$(_dc logs --no-log-prefix --tail 200 electrs 2>/dev/null)" || logs=""
     fi
     last_chain_line="$(echo "$logs" | grep 'chain updated: tip=' | tail -1)" || last_chain_line=""
     last_index_line="$(echo "$logs" | grep 'indexing ' | tail -1)" || last_index_line=""
+    last_ibd_line="$(echo "$logs" | grep -E 'waiting for [0-9]+ blocks to download \(IBD\)' | tail -1)" || last_ibd_line=""
 
     electrs_height="$(echo "$last_chain_line" | sed -n 's/.*height=\([0-9]\+\).*/\1/p')"
     electrs_tip="$(echo "$last_chain_line" | sed -n 's/.*tip=\([0-9a-f]\{64\}\).*/\1/p')"
@@ -206,6 +211,8 @@ show_electrs_status() {
         local binfo bheight pct lag
         binfo="$(bitcoin_cli getblockchaininfo 2>/dev/null)" || binfo=""
         bheight="$(echo "$binfo" | jq -r '.blocks // empty' 2>/dev/null)" || bheight=""
+        local bibd
+        bibd="$(echo "$binfo" | jq -r '.initialblockdownload // false')"
         if [[ -n "$bheight" ]] && [[ "$bheight" =~ ^[0-9]+$ ]] && [[ "$bheight" -gt 0 ]]; then
             pct="$(awk -v e="$electrs_height" -v b="$bheight" 'BEGIN { printf "%.2f", (e*100)/b }')"
             echo -e "    Progress:    ${pct}% (${electrs_height}/${bheight})"
@@ -215,7 +222,11 @@ show_electrs_status() {
                 availability_detail=""
             elif [[ "$electrs_height" -lt "$bheight" ]]; then
                 availability="not ready"
-                availability_detail="syncing"
+                if [[ "$bibd" == "true" ]]; then
+                    availability_detail="waiting for bitcoin sync"
+                else
+                    availability_detail="syncing"
+                fi
             else
                 availability="ready"
             fi
@@ -224,9 +235,23 @@ show_electrs_status() {
 
     # Fallback readiness when height comparison is unavailable.
     if [[ "$availability" == "unknown" ]]; then
-        if [[ -n "$index_range" ]] || [[ "$health" == "starting" ]]; then
+        if [[ -n "$last_ibd_line" ]]; then
+            availability="not ready"
+            availability_detail="waiting for bitcoin sync"
+        elif [[ -n "$index_range" ]] || [[ "$health" == "starting" ]]; then
             availability="not ready"
             availability_detail="syncing"
+        elif dc_is_running bitcoin 2>/dev/null; then
+            local binfo bibd
+            binfo="$(bitcoin_cli getblockchaininfo 2>/dev/null)" || binfo=""
+            bibd="$(echo "$binfo" | jq -r '.initialblockdownload // false')"
+            if [[ "$bibd" == "true" ]]; then
+                availability="not ready"
+                availability_detail="waiting for bitcoin sync"
+            else
+                availability="unknown"
+                availability_detail="cannot verify sync progress"
+            fi
         elif [[ "$health" == "healthy" ]]; then
             availability="unknown"
             availability_detail="cannot verify sync progress"

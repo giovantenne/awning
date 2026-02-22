@@ -67,7 +67,7 @@ main() {
     # Block operational commands until setup has generated .env
     if [[ ! -f "$env_file" ]]; then
         case "$command" in
-            setup|help|-h|--help)
+            setup|help|-h|--help|version)
                 ;;
             *)
                 print_fail "Node is not configured yet (.env not found)."
@@ -128,6 +128,9 @@ main() {
         status)
             show_status
             ;;
+        version)
+            echo "$(get_awning_version)"
+            ;;
         logs)
             dc_logs -f --tail 50 "${@:2}"
             ;;
@@ -172,7 +175,7 @@ main() {
 }
 
 show_help() {
-    draw_header "AWNING v2.0" "Bitcoin + Lightning Node"
+    draw_header "AWNING v$(get_awning_version)" "Bitcoin + Lightning Node"
     echo ""
     echo -e "  ${BOLD}Usage:${NC} ./awning.sh [command]"
     echo ""
@@ -190,6 +193,7 @@ show_help() {
     echo ""
     echo -e "  ${BOLD}Monitoring:${NC}"
     echo -e "    ${CYAN}status${NC}          Service status and sync progress"
+    echo -e "    ${CYAN}version${NC}         Show Awning version"
     echo -e "    ${CYAN}logs${NC} [svc]      Follow service logs"
     echo -e "    ${CYAN}connections${NC}     Wallet connection info"
     echo ""

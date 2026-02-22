@@ -90,7 +90,11 @@ _display_width() {
             s="${s/"$t"/}"
             count=$((count + 1))
         done
-        w=$((w + count))
+        local symbol_width=1
+        if [[ "$t" == "⚠" ]]; then
+            symbol_width=2
+        fi
+        w=$((w + (count * symbol_width)))
     done
     echo "$w"
 }
@@ -390,6 +394,25 @@ awning_path() {
 }
 
 # ============================================================
+# Version helpers
+# ============================================================
+
+AWNING_VERSION_CACHE=""
+
+get_awning_version() {
+    if [[ -z "$AWNING_VERSION_CACHE" ]]; then
+        local version_file
+        version_file="$(awning_path VERSION)"
+        if [[ -f "$version_file" ]]; then
+            AWNING_VERSION_CACHE="$(cat "$version_file")"
+        else
+            AWNING_VERSION_CACHE="0.0.0"
+        fi
+    fi
+    echo "$AWNING_VERSION_CACHE"
+}
+
+# ============================================================
 # Network helpers
 # ============================================================
 
@@ -472,11 +495,11 @@ get_status_label() {
     done
 
     if [[ "$running" -eq "$total" ]] && [[ "$healthy" -eq "$total" ]]; then
-        echo -e "${GREEN}${ICON_BOLT} All services healthy${NC}"
+        echo -e "${GREEN}All services healthy${NC}"
     elif [[ "$running" -eq "$total" ]] && [[ "$starting" -gt 0 ]]; then
-        echo -e "${YELLOW}${ICON_BOLT} Services starting (${starting})${NC}"
+        echo -e "${YELLOW}Services starting (${starting})${NC}"
     elif [[ "$unhealthy" -gt 0 ]]; then
-        echo -e "${RED}${ICON_WARN} ${unhealthy} service(s) unhealthy${NC}"
+        echo -e "${RED}${unhealthy} service(s) unhealthy${NC}"
     elif [[ "$running" -gt 0 ]]; then
         echo -e "${YELLOW}${running}/${total} services running${NC}"
     else
