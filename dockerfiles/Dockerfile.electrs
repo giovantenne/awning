@@ -41,6 +41,7 @@ RUN openssl req -x509 -nodes -newkey rsa:4096 \
     -out /etc/stunnel/stunnel.crt \
     -subj "/CN=localhost" -days 3650 \
     && cat /etc/stunnel/stunnel.key /etc/stunnel/stunnel.crt > /etc/stunnel/stunnel.pem \
+    && chown electrs:electrs /etc/stunnel/stunnel.pem \
     && chmod 600 /etc/stunnel/stunnel.pem \
     && rm /etc/stunnel/stunnel.key /etc/stunnel/stunnel.crt
 
