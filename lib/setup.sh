@@ -1065,7 +1065,12 @@ step_build_and_start() {
     print_step "Step 6/7: Restarting Services"
     echo ""
     ensure_lnd_password_file
-    dc_restart
+    dc_restart >/dev/null 2>&1 &
+    local restart_pid=$!
+    if ! spinner "$restart_pid" "Recreating services with updated configuration..."; then
+        print_fail "Failed to restart services with updated configuration"
+        return 1
+    fi
 }
 
 # ============================================================
