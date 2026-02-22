@@ -299,21 +299,6 @@ step_prerequisites() {
         missing=1
     fi
 
-    # Host tools (jq, curl, base64, awk, sed, grep, tail, tr + optional git)
-    local tools_missing=""
-    local tool
-    for tool in jq curl base64 awk sed grep tail tr; do
-        if ! command -v "$tool" &>/dev/null; then
-            tools_missing="${tools_missing:+${tools_missing}, }${tool}"
-        fi
-    done
-    if [[ -z "$tools_missing" ]]; then
-        print_check "Host tools (jq, curl, base64, awk, sed, grep, tail, tr)"
-    else
-        print_fail "Missing host tools: ${tools_missing}"
-        missing=1
-    fi
-
     # Disk space check
     # Required free space is reduced by already downloaded blockchain data.
     local avail_kb avail_gb existing_bitcoin_kb required_free_kb required_free_gb
