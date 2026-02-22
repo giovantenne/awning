@@ -25,8 +25,13 @@ RUN curl -s https://raw.githubusercontent.com/lightningnetwork/lnd/master/script
 # Extract binaries
 RUN tar -xzf lnd-linux-${LND_ARCH}-v${LND_VERSION}.tar.gz
 
-# Download lndconnect for Zeus wallet QR codes
+# Download lndconnect for Zeus wallet QR codes (with SHA256 verification)
 RUN wget -q "https://github.com/LN-Zap/lndconnect/releases/download/v0.2.0/lndconnect-linux-${LND_ARCH}-v0.2.0.tar.gz" \
+    && if [ "${LND_ARCH}" = "amd64" ]; then \
+         echo "0c60eaa86de22bcfe5be232f82d4d38690d6f9922a30a7d1754b2352885da6fe  lndconnect-linux-${LND_ARCH}-v0.2.0.tar.gz" | sha256sum -c -; \
+       elif [ "${LND_ARCH}" = "arm64" ]; then \
+         echo "d9abcf75d2e284cde122a6df93bcbff0372c692b994cf02056136d854a7455a5  lndconnect-linux-${LND_ARCH}-v0.2.0.tar.gz" | sha256sum -c -; \
+       fi \
     && tar -xzf lndconnect-linux-${LND_ARCH}-v0.2.0.tar.gz
 
 # --- Runtime image ---

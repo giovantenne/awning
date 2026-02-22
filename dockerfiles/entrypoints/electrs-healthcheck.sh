@@ -7,6 +7,11 @@ if /bin/nc -4 -z 127.0.0.1 50001 && /bin/nc -4 -z 127.0.0.1 50002; then
 fi
 
 # During Bitcoin IBD, electrs may not be ready yet; avoid reporting unhealthy.
+# But first verify that the electrs process is actually running.
+if ! pgrep -x electrs >/dev/null 2>&1; then
+    exit 1
+fi
+
 conf="/data/electrs.toml"
 if [ ! -f "$conf" ]; then
     exit 1

@@ -20,7 +20,7 @@ dc_active_services() {
     if [[ -n "${RTL_PASSWORD:-}" ]]; then
         services+=(rtl)
     fi
-    echo "${services[@]}"
+    printf '%s ' "${services[@]}"
 }
 
 # ============================================================
