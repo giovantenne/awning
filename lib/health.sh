@@ -7,24 +7,27 @@ show_status() {
     draw_header "AWNING v$(get_awning_version)" "Service Dashboard"
     echo ""
 
+    # Fetch Bitcoin blockchain info once (reused by sub-functions)
+    local _cached_binfo=""
+    if dc_is_running bitcoin 2>/dev/null; then
+        _cached_binfo="$(bitcoin_cli getblockchaininfo 2>/dev/null)" || _cached_binfo=""
+    fi
+
     # Service status table
     echo -e "  ${BOLD}Services${NC}"
     echo ""
 
     local services
     local bitcoin_sync_detail=""
-    if dc_is_running bitcoin 2>/dev/null; then
-        local binfo bprogress bblocks bheaders bibd bpct
-        binfo="$(bitcoin_cli getblockchaininfo 2>/dev/null)" || binfo=""
-        if [[ -n "$binfo" ]]; then
-            bprogress="$(echo "$binfo" | jq -r '.verificationprogress // empty')"
-            bblocks="$(echo "$binfo" | jq -r '.blocks // 0')"
-            bheaders="$(echo "$binfo" | jq -r '.headers // 0')"
-            bibd="$(echo "$binfo" | jq -r '.initialblockdownload // false')"
-            bpct="$(echo "${bprogress:-0}" | awk '{printf "%.2f", $1 * 100}')"
-            if [[ "$bibd" == "true" ]] || [[ "${bblocks:-0}" -lt "${bheaders:-0}" ]] || awk "BEGIN {exit (${bpct:-0} >= 99.99)}" 2>/dev/null; then
-                bitcoin_sync_detail="sync (${bpct}%)"
-            fi
+    if [[ -n "$_cached_binfo" ]]; then
+        local bprogress bblocks bheaders bibd bpct
+        bprogress="$(echo "$_cached_binfo" | jq -r '.verificationprogress // empty')"
+        bblocks="$(echo "$_cached_binfo" | jq -r '.blocks // 0')"
+        bheaders="$(echo "$_cached_binfo" | jq -r '.headers // 0')"
+        bibd="$(echo "$_cached_binfo" | jq -r '.initialblockdownload // false')"
+        bpct="$(echo "${bprogress:-0}" | awk '{printf "%.2f", $1 * 100}')"
+        if [[ "$bibd" == "true" ]] || [[ "${bblocks:-0}" -lt "${bheaders:-0}" ]] || awk "BEGIN {exit (${bpct:-0} >= 99.99)}" 2>/dev/null; then
+            bitcoin_sync_detail="sync (${bpct}%)"
         fi
     fi
 
@@ -86,7 +89,7 @@ show_status() {
 
     # Bitcoin sync status
     if dc_is_running bitcoin; then
-        show_bitcoin_status
+        show_bitcoin_status "$_cached_binfo"
     fi
 
     # LND status
@@ -96,20 +99,23 @@ show_status() {
 
     # Electrs status
     if dc_is_running electrs; then
-        show_electrs_status
+        show_electrs_status "$_cached_binfo"
     fi
 
 }
 
 # Bitcoin Core sync status with progress bar
+# Args: $1 - cached getblockchaininfo JSON (optional, fetched if empty)
 show_bitcoin_status() {
-    local info
-    info="$(bitcoin_cli getblockchaininfo 2>/dev/null)" || {
-        echo -e "  ${BOLD}Bitcoin Core${NC}"
-        print_warn "Cannot connect (starting up?)"
-        echo ""
-        return
-    }
+    local info="${1:-}"
+    if [[ -z "$info" ]]; then
+        info="$(bitcoin_cli getblockchaininfo 2>/dev/null)" || {
+            echo -e "  ${BOLD}Bitcoin Core${NC}"
+            print_warn "Cannot connect (starting up?)"
+            echo ""
+            return
+        }
+    fi
 
     local chain blocks headers progress size
     chain="$(echo "$info" | jq -r '.chain')"
@@ -182,92 +188,78 @@ show_lnd_status() {
 }
 
 # Electrs status with indexing progress (best effort from logs)
+# Args: $1 - cached Bitcoin getblockchaininfo JSON (optional)
 show_electrs_status() {
+    local cached_binfo="${1:-}"
+
+    echo -e "  ${BOLD}Electrs${NC}"
+
     local health
     health="$(dc_get_health electrs)"
     [[ -z "$health" ]] && health="unknown"
 
-    local logs last_chain_line last_index_line last_ibd_line electrs_height electrs_tip index_range
+    # --- Parse Electrs logs for sync state ---
+    local logs
     logs="$(_docker logs --tail 200 electrs 2>/dev/null)" || logs=""
-    if [[ -z "$logs" ]]; then
-        logs="$(_dc logs --no-log-prefix --tail 200 electrs 2>/dev/null)" || logs=""
-    fi
-    last_chain_line="$(echo "$logs" | grep 'chain updated: tip=' | tail -1)" || last_chain_line=""
-    last_index_line="$(echo "$logs" | grep 'indexing ' | tail -1)" || last_index_line=""
-    last_ibd_line="$(echo "$logs" | grep -E 'waiting for [0-9]+ blocks to download \(IBD\)' | tail -1)" || last_ibd_line=""
+    [[ -z "$logs" ]] && logs="$(_dc logs --no-log-prefix --tail 200 electrs 2>/dev/null)" || true
 
+    local last_chain_line last_index_line last_ibd_line
+    last_chain_line="$(echo "$logs" | grep 'chain updated: tip=' | tail -1)" || true
+    last_index_line="$(echo "$logs" | grep 'indexing ' | tail -1)" || true
+    last_ibd_line="$(echo "$logs" | grep -E 'waiting for [0-9]+ blocks to download \(IBD\)' | tail -1)" || true
+
+    local electrs_height index_range
     electrs_height="$(echo "$last_chain_line" | sed -n 's/.*height=\([0-9]\+\).*/\1/p')"
-    electrs_tip="$(echo "$last_chain_line" | sed -n 's/.*tip=\([0-9a-f]\{64\}\).*/\1/p')"
     index_range="$(echo "$last_index_line" | sed -n 's/.*indexing [0-9]\+ blocks: \(\[[0-9]\+\.\.[0-9]\+\]\).*/\1/p')"
 
-    local availability="unknown"
-    local availability_detail=""
-    local ready_icon="${GREEN}✓${NC}"
-    local wait_icon="${YELLOW}…${NC}"
+    # --- Resolve Bitcoin blockchain info (use cache when available) ---
+    local binfo=""
+    if dc_is_running bitcoin 2>/dev/null; then
+        binfo="${cached_binfo:-}"
+        [[ -z "$binfo" ]] && { binfo="$(bitcoin_cli getblockchaininfo 2>/dev/null)" || binfo=""; }
+    fi
 
-    echo -e "  ${BOLD}Electrs${NC}"
-
-    if [[ -n "$electrs_height" ]] && dc_is_running bitcoin 2>/dev/null; then
-        local binfo bheight pct lag
-        binfo="$(bitcoin_cli getblockchaininfo 2>/dev/null)" || binfo=""
+    local bheight="" bibd="false"
+    if [[ -n "$binfo" ]]; then
         bheight="$(echo "$binfo" | jq -r '.blocks // empty' 2>/dev/null)" || bheight=""
-        local bibd
         bibd="$(echo "$binfo" | jq -r '.initialblockdownload // false')"
-        if [[ -n "$bheight" ]] && [[ "$bheight" =~ ^[0-9]+$ ]] && [[ "$bheight" -gt 0 ]]; then
-            pct="$(awk -v e="$electrs_height" -v b="$bheight" 'BEGIN { printf "%.2f", (e*100)/b }')"
-            echo -e "    Progress:    ${pct}% (${electrs_height}/${bheight})"
-            lag=$((bheight - electrs_height))
-            if (( lag <= 2 )); then
-                availability="ready"
-                availability_detail=""
-            elif [[ "$electrs_height" -lt "$bheight" ]]; then
-                availability="not ready"
-                if [[ "$bibd" == "true" ]]; then
-                    availability_detail="waiting for bitcoin sync"
-                else
-                    availability_detail="syncing"
-                fi
-            else
-                availability="ready"
-            fi
-        fi
     fi
 
-    # Fallback readiness when height comparison is unavailable.
-    if [[ "$availability" == "unknown" ]]; then
-        if [[ -n "$last_ibd_line" ]]; then
-            availability="not ready"
-            availability_detail="waiting for bitcoin sync"
-        elif [[ -n "$index_range" ]] || [[ "$health" == "starting" ]]; then
-            availability="not ready"
-            availability_detail="syncing"
-        elif dc_is_running bitcoin 2>/dev/null; then
-            local binfo bibd
-            binfo="$(bitcoin_cli getblockchaininfo 2>/dev/null)" || binfo=""
-            bibd="$(echo "$binfo" | jq -r '.initialblockdownload // false')"
-            if [[ "$bibd" == "true" ]]; then
-                availability="not ready"
-                availability_detail="waiting for bitcoin sync"
-            else
-                availability="unknown"
-                availability_detail="cannot verify sync progress"
-            fi
-        elif [[ "$health" == "healthy" ]]; then
-            availability="unknown"
-            availability_detail="cannot verify sync progress"
+    # --- Determine usability with early returns ---
+    local availability="unknown" availability_detail=""
+
+    # Primary: compare Electrs height to Bitcoin height
+    if [[ -n "$electrs_height" && -n "$bheight" ]] && [[ "$bheight" =~ ^[0-9]+$ ]] && (( bheight > 0 )); then
+        local pct lag
+        pct="$(awk -v e="$electrs_height" -v b="$bheight" 'BEGIN { printf "%.2f", (e*100)/b }')"
+        echo -e "    Progress:    ${pct}% (${electrs_height}/${bheight})"
+        lag=$((bheight - electrs_height))
+        if (( lag <= 2 )); then
+            availability="ready"
+        elif [[ "$bibd" == "true" ]]; then
+            availability="not ready"; availability_detail="waiting for bitcoin sync"
         else
-            availability="not ready"
-            availability_detail="$health"
+            availability="not ready"; availability_detail="syncing"
         fi
+    # Fallback: use log heuristics
+    elif [[ -n "$last_ibd_line" ]]; then
+        availability="not ready"; availability_detail="waiting for bitcoin sync"
+    elif [[ -n "$index_range" ]] || [[ "$health" == "starting" ]]; then
+        availability="not ready"; availability_detail="syncing"
+    elif [[ "$bibd" == "true" ]]; then
+        availability="not ready"; availability_detail="waiting for bitcoin sync"
+    elif [[ "$health" == "healthy" ]]; then
+        availability="unknown"; availability_detail="cannot verify sync progress"
+    elif [[ "$health" != "unknown" ]]; then
+        availability="not ready"; availability_detail="$health"
     fi
 
-    if [[ "$availability" == "ready" ]]; then
-        echo -e "    Usability:   ${ready_icon} ready for wallets"
-    elif [[ "$availability" == "unknown" ]]; then
-        echo -e "    Usability:   ${YELLOW}?${NC} unknown ${DIM}(${availability_detail})${NC}"
-    else
-        echo -e "    Usability:   ${wait_icon} not ready ${DIM}(${availability_detail})${NC}"
-    fi
+    # --- Render usability ---
+    case "$availability" in
+        ready)     echo -e "    Usability:   ${GREEN}✓${NC} ready for wallets" ;;
+        unknown)   echo -e "    Usability:   ${YELLOW}?${NC} unknown ${DIM}(${availability_detail})${NC}" ;;
+        *)         echo -e "    Usability:   ${YELLOW}…${NC} not ready ${DIM}(${availability_detail})${NC}" ;;
+    esac
 
     echo ""
 }

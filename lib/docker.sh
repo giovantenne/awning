@@ -230,6 +230,7 @@ dc_build_services() {
             done
             echo -e "  ${DIM}--- Full log: .build.log ---${NC}"
             echo ""
+            rm -f "$build_log"
             return 1
         fi
     done

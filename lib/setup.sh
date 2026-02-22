@@ -4,7 +4,7 @@
 # Only requirement: Docker (with compose plugin)
 
 # --- Setup constants ---
-REQUIRED_DISK_GB=900
+# REQUIRED_DISK_GB is defined in common.sh
 FALLBACK_BITCOIN_VERSION="30.2"
 FALLBACK_LND_VERSION="0.20.1-beta"
 FALLBACK_ELECTRS_VERSION="0.11.0"
@@ -13,12 +13,27 @@ FALLBACK_RTL_VERSION="0.15.8"
 # Update or append a KEY=VALUE pair in a .env file.
 # If the key already exists, its value is replaced in-place.
 # If not, the line is appended.
+# Uses a line-by-line loop instead of sed to avoid escaping pitfalls
+# with special characters in passwords and values.
 # Args: $1=file  $2=key  $3=value
 _env_set() {
     local file="$1" key="$2" value="$3"
-    if grep -q "^${key}=" "$file" 2>/dev/null; then
-        sed -i "s|^${key}=.*|${key}=${value}|" "$file"
-    else
+    local found=0
+    local tmpfile="${file}.tmp.$$"
+
+    if [[ -f "$file" ]]; then
+        while IFS= read -r line || [[ -n "$line" ]]; do
+            if [[ "$line" == "${key}="* ]]; then
+                echo "${key}=${value}"
+                found=1
+            else
+                echo "$line"
+            fi
+        done < "$file" > "$tmpfile"
+        mv "$tmpfile" "$file"
+    fi
+
+    if [[ "$found" -eq 0 ]]; then
         echo "${key}=${value}" >> "$file"
     fi
 }
@@ -59,18 +74,10 @@ run_auto_setup() {
     step_prerequisites "$ignore_disk_space" || return 1
 
     # --- Auto-detect architecture ---
-    local arch
-    arch="$(uname -m)"
-    local bitcoin_arch lnd_arch
-    case "$arch" in
-        x86_64)  bitcoin_arch="x86_64"; lnd_arch="amd64" ;;
-        aarch64) bitcoin_arch="aarch64"; lnd_arch="arm64" ;;
-        *)
-            print_fail "Unsupported architecture: $arch"
-            return 1
-            ;;
-    esac
-    print_info "Architecture: ${arch} (auto-detected)"
+    detect_arch || return 1
+    local bitcoin_arch="$DETECTED_BITCOIN_ARCH"
+    local lnd_arch="$DETECTED_LND_ARCH"
+    print_info "Architecture: $(uname -m) (auto-detected)"
 
     # --- Auto-detect UID/GID ---
     local host_uid host_gid
@@ -83,14 +90,22 @@ run_auto_setup() {
     echo -e "  ${BOLD}${CYAN}Fetching latest versions...${NC}"
 
     local btc_version lnd_version electrs_version rtl_version
+    local tmp_btc_ver tmp_lnd_ver tmp_electrs_ver tmp_rtl_ver
+    tmp_btc_ver="$(mktemp /tmp/awning_btc_ver.XXXXXX)"
+    tmp_lnd_ver="$(mktemp /tmp/awning_lnd_ver.XXXXXX)"
+    tmp_electrs_ver="$(mktemp /tmp/awning_electrs_ver.XXXXXX)"
+    tmp_rtl_ver="$(mktemp /tmp/awning_rtl_ver.XXXXXX)"
 
-    fetch_latest_github_version "bitcoin/bitcoin" > /tmp/awning_btc_ver 2>/dev/null &
+    # Ensure temp files are cleaned up on exit/error
+    trap 'rm -f "$tmp_btc_ver" "$tmp_lnd_ver" "$tmp_electrs_ver" "$tmp_rtl_ver"' EXIT
+
+    fetch_latest_github_version "bitcoin/bitcoin" > "$tmp_btc_ver" 2>/dev/null &
     local pid_btc=$!
-    fetch_latest_github_version "lightningnetwork/lnd" > /tmp/awning_lnd_ver 2>/dev/null &
+    fetch_latest_github_version "lightningnetwork/lnd" > "$tmp_lnd_ver" 2>/dev/null &
     local pid_lnd=$!
-    fetch_latest_github_version "romanz/electrs" > /tmp/awning_electrs_ver 2>/dev/null &
+    fetch_latest_github_version "romanz/electrs" > "$tmp_electrs_ver" 2>/dev/null &
     local pid_electrs=$!
-    fetch_latest_github_version "Ride-The-Lightning/RTL" > /tmp/awning_rtl_ver 2>/dev/null &
+    fetch_latest_github_version "Ride-The-Lightning/RTL" > "$tmp_rtl_ver" 2>/dev/null &
     local pid_rtl=$!
 
     # Wait for all fetches
@@ -99,11 +114,12 @@ run_auto_setup() {
     wait "$pid_electrs" 2>/dev/null || true
     wait "$pid_rtl" 2>/dev/null || true
 
-    btc_version="$(cat /tmp/awning_btc_ver 2>/dev/null)" || true
-    lnd_version="$(cat /tmp/awning_lnd_ver 2>/dev/null)" || true
-    electrs_version="$(cat /tmp/awning_electrs_ver 2>/dev/null)" || true
-    rtl_version="$(cat /tmp/awning_rtl_ver 2>/dev/null)" || true
-    rm -f /tmp/awning_btc_ver /tmp/awning_lnd_ver /tmp/awning_electrs_ver /tmp/awning_rtl_ver
+    btc_version="$(cat "$tmp_btc_ver" 2>/dev/null)" || true
+    lnd_version="$(cat "$tmp_lnd_ver" 2>/dev/null)" || true
+    electrs_version="$(cat "$tmp_electrs_ver" 2>/dev/null)" || true
+    rtl_version="$(cat "$tmp_rtl_ver" 2>/dev/null)" || true
+    rm -f "$tmp_btc_ver" "$tmp_lnd_ver" "$tmp_electrs_ver" "$tmp_rtl_ver"
+    trap - EXIT
 
     # Fallback to constants if fetch failed
     btc_version="${btc_version:-$FALLBACK_BITCOIN_VERSION}"
@@ -227,7 +243,7 @@ EOF
     fi
 
     # --- Show seed screen ---
-    show_seed_screen
+    show_seed_screen "$_AUTO_WALLET_PASSWORD"
 
     # Return 0 so caller shows the dashboard
     return 0
@@ -238,6 +254,10 @@ EOF
 # ============================================================
 step_prerequisites() {
     local ignore_disk_space="${1:-0}"
+    local can_sudo=0
+    if command -v sudo &>/dev/null && sudo -n true 2>/dev/null; then
+        can_sudo=1
+    fi
     echo ""
     echo -e "  ${BOLD}${CYAN}Checking prerequisites...${NC}"
 
@@ -255,8 +275,9 @@ step_prerequisites() {
     fi
 
     # Docker compose (plugin or standalone)
-    if docker compose version &>/dev/null 2>&1 || sudo docker compose version &>/dev/null 2>&1 || \
-       docker-compose version &>/dev/null 2>&1 || sudo docker-compose version &>/dev/null 2>&1; then
+    if docker compose version &>/dev/null 2>&1 || docker-compose version &>/dev/null 2>&1 || \
+       { [[ "$can_sudo" -eq 1 ]] && sudo -n docker compose version &>/dev/null 2>&1; } || \
+       { [[ "$can_sudo" -eq 1 ]] && sudo -n docker-compose version &>/dev/null 2>&1; }; then
         local compose_ver
         compose_ver="$(docker compose version 2>/dev/null | grep -oP '\d+\.\d+(\.\d+)?' | head -1)" || true
         if [[ -z "$compose_ver" ]]; then
@@ -271,22 +292,35 @@ step_prerequisites() {
     fi
 
     # Docker daemon running
-    if docker info &>/dev/null 2>&1 || sudo docker info &>/dev/null 2>&1; then
+    if docker info &>/dev/null 2>&1 || { [[ "$can_sudo" -eq 1 ]] && sudo -n docker info &>/dev/null 2>&1; }; then
         print_check "Docker daemon running"
     else
         print_fail "Docker daemon is not running"
         missing=1
     fi
 
+    # Host tools (jq, curl, base64, awk, sed, grep, tail, tr + optional git)
+    local tools_missing=""
+    local tool
+    for tool in jq curl base64 awk sed grep tail tr; do
+        if ! command -v "$tool" &>/dev/null; then
+            tools_missing="${tools_missing:+${tools_missing}, }${tool}"
+        fi
+    done
+    if [[ -z "$tools_missing" ]]; then
+        print_check "Host tools (jq, curl, base64, awk, sed, grep, tail, tr)"
+    else
+        print_fail "Missing host tools: ${tools_missing}"
+        missing=1
+    fi
+
     # Disk space check
     # Required free space is reduced by already downloaded blockchain data.
-    local avail_kb avail_gb existing_bitcoin_kb existing_bitcoin_gb required_free_kb required_free_gb
+    local avail_kb avail_gb existing_bitcoin_kb required_free_kb required_free_gb
     avail_kb="$(df --output=avail "$(awning_path .)" 2>/dev/null | tail -1 | tr -d ' ')" || avail_kb=0
     avail_gb="$(echo "$avail_kb" | awk '{printf "%.1f", $1 / 1048576}')"
     existing_bitcoin_kb="$(du -sk "$(awning_path data/bitcoin)" 2>/dev/null | awk '{print $1}')" || existing_bitcoin_kb=0
     existing_bitcoin_kb="${existing_bitcoin_kb:-0}"
-    existing_bitcoin_gb="$(echo "$existing_bitcoin_kb" | awk '{printf "%.1f", $1 / 1048576}')"
-
     required_free_kb=$((REQUIRED_DISK_GB * 1048576 - existing_bitcoin_kb))
     if [[ "$required_free_kb" -lt 0 ]]; then
         required_free_kb=0
@@ -552,18 +586,10 @@ step_node_config() {
     print_step "Step 1/7: Node Configuration"
 
     # Auto-detect architecture
-    local arch
-    arch="$(uname -m)"
-    local bitcoin_arch lnd_arch
-    case "$arch" in
-        x86_64)  bitcoin_arch="x86_64"; lnd_arch="amd64" ;;
-        aarch64) bitcoin_arch="aarch64"; lnd_arch="arm64" ;;
-        *)
-            print_fail "Unsupported architecture: $arch"
-            return 1
-            ;;
-    esac
-    print_info "Architecture: ${arch} (auto-detected)"
+    detect_arch || return 1
+    local bitcoin_arch="$DETECTED_BITCOIN_ARCH"
+    local lnd_arch="$DETECTED_LND_ARCH"
+    print_info "Architecture: $(uname -m) (auto-detected)"
 
     # Auto-detect UID/GID
     local host_uid host_gid
@@ -754,7 +780,7 @@ step_scb_config() {
                     git -C "$test_dir" add .scb-write-check
                     git -C "$test_dir" -c user.email="awning@backup" -c user.name="Awning SCB" commit -q -m "SCB write check"
                     push_test="$(GIT_SSH_COMMAND="ssh -i ${key_priv} -o UserKnownHostsFile=${scb_ssh_dir}/known_hosts -o StrictHostKeyChecking=yes" \
-                        git -C "$test_dir" push --dry-run origin HEAD:refs/heads/${branch_name} 2>&1)" || true
+                        git -C "$test_dir" push --dry-run origin "HEAD:refs/heads/${branch_name}" 2>&1)" || true
                     rm -rf "$test_dir"
 
                     if echo "$push_test" | grep -qiE "Everything up-to-date|new branch|\\[new branch\\]|To "; then
@@ -1038,7 +1064,7 @@ PY
 }
 
 # ============================================================
-# Step 4: Build Docker images
+# Step 5: Build Docker images
 # ============================================================
 step_build_and_start() {
     print_step "Step 5/7: Building Docker Images"
@@ -1066,7 +1092,7 @@ step_build_and_start() {
 }
 
 # ============================================================
-# Step 6: Initialize LND wallet
+# Step 7: Initialize LND wallet
 # ============================================================
 step_initialize_wallet() {
     print_step "Step 7/7: Initialize LND Wallet"
@@ -1143,7 +1169,7 @@ ensure_lnd_password_file() {
 }
 
 wait_for_lnd_stable() {
-    local timeout_s=90
+    local timeout_s="${LND_STABLE_TIMEOUT:-90}"
     local elapsed=0
     local status=""
 
@@ -1168,10 +1194,13 @@ wait_for_lnd_stable() {
 # Global array to hold the 24-word seed after wallet creation
 _AUTO_SEED_WORDS=()
 
+# Global to pass the generated wallet password to show_seed_screen
+_AUTO_WALLET_PASSWORD=""
+
 # Wait for LND REST API to be in wallet-creation-ready state.
 # Returns: 0 = ready (NON_EXISTING), 1 = timeout, 2 = wallet already exists
 wait_for_lnd_api() {
-    local timeout_s=120
+    local timeout_s="${LND_API_TIMEOUT:-120}"
     local elapsed=0
 
     while (( elapsed < timeout_s )); do
@@ -1194,12 +1223,53 @@ wait_for_lnd_api() {
     return 1
 }
 
+# Wrapper: runs wait_for_lnd_api under a spinner but handles exit code 2
+# (wallet already exists) without the spinner displaying a false error.
+# Returns: 0 = ready, 1 = timeout, 2 = wallet already exists
+_wait_for_lnd_api_with_spinner() {
+    local status_file
+    status_file="$(mktemp /tmp/awning_lnd_api_status.XXXXXX)"
+    (
+        wait_for_lnd_api
+        echo $? > "$status_file"
+    ) &
+    local wait_pid=$!
+
+    local frames=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
+    local i=0
+    local message="Waiting for LND..."
+    while kill -0 "$wait_pid" 2>/dev/null; do
+        printf "\r  [${CYAN}%s${NC}] %s" "${frames[i++ % ${#frames[@]}]}" "$message"
+        sleep 0.1
+    done
+    wait "$wait_pid" 2>/dev/null || true
+    printf "\r\033[K"
+
+    local api_status=1
+    if [[ -f "$status_file" ]]; then
+        api_status="$(cat "$status_file")"
+        rm -f "$status_file"
+    fi
+
+    if [[ "$api_status" -eq 0 ]]; then
+        print_check "$message"
+    elif [[ "$api_status" -eq 2 ]]; then
+        print_info "Wallet already exists"
+    else
+        print_fail "$message (timed out)"
+    fi
+
+    return "$api_status"
+}
+
 # Initialize LND wallet via REST API (non-interactive).
 # Two-step process: 1) /v1/genseed to generate seed, 2) /v1/initwallet with seed + password.
 # Writes password.txt, captures seed in _AUTO_SEED_WORDS.
 # Returns: 0 = success, 1 = failure
 auto_initialize_wallet() {
-    local lnd_password="ToTheMoon"
+    local lnd_password
+    lnd_password="$(generate_password 16)"
+    _AUTO_WALLET_PASSWORD="$lnd_password"
     local password_file
     password_file="$(awning_path data/lnd/password.txt)"
     mkdir -p "$(awning_path data/lnd)"
@@ -1227,17 +1297,15 @@ auto_initialize_wallet() {
     fi
 
     # Wait for LND REST API to be ready for wallet creation
-    wait_for_lnd_api &
-    local wait_pid=$!
     local api_status=0
-    spinner "$wait_pid" "Waiting for LND..." || api_status=$?
+    _wait_for_lnd_api_with_spinner || api_status=$?
 
     if [[ $api_status -eq 2 ]]; then
         print_info "Wallet already exists, skipping creation."
         return 0
     fi
     if [[ $api_status -ne 0 ]]; then
-        print_fail "LND REST API did not become ready within 120 seconds."
+        print_fail "LND REST API did not become ready within ${LND_API_TIMEOUT:-120} seconds."
         print_info "Check logs with: ${CYAN}./awning.sh logs lnd${NC}"
         return 1
     fi
@@ -1255,7 +1323,7 @@ auto_initialize_wallet() {
 
     # Check for error in genseed response
     local genseed_error
-    genseed_error="$(echo "$genseed_response" | dc_exec -T lnd jq -r '.message // empty' 2>/dev/null)" || true
+    genseed_error="$(echo "$genseed_response" | jq -r '.message // empty' 2>/dev/null)" || true
     if [[ -n "$genseed_error" ]]; then
         print_fail "genseed error: ${genseed_error}"
         return 1
@@ -1263,7 +1331,7 @@ auto_initialize_wallet() {
 
     # Extract the seed mnemonic array as JSON for re-use in initwallet
     local seed_array
-    seed_array="$(echo "$genseed_response" | dc_exec -T lnd jq -c '.cipher_seed_mnemonic' 2>/dev/null)" || true
+    seed_array="$(echo "$genseed_response" | jq -c '.cipher_seed_mnemonic' 2>/dev/null)" || true
     if [[ -z "$seed_array" || "$seed_array" == "null" ]]; then
         print_fail "Could not extract seed from genseed response."
         return 1
@@ -1277,9 +1345,8 @@ auto_initialize_wallet() {
     init_payload="{\"wallet_password\":\"${password_b64}\",\"cipher_seed_mnemonic\":${seed_array}}"
 
     local init_response
-    init_response="$(dc_exec -T lnd sh -c \
-        "curl -s --cacert /data/.lnd/tls.cert https://localhost:8080/v1/initwallet \
-         -d '${init_payload}'" \
+    init_response="$(echo "$init_payload" | dc_exec -T lnd sh -c \
+        'curl -s --cacert /data/.lnd/tls.cert https://localhost:8080/v1/initwallet -d @-' \
     )" || true
 
     if [[ -z "$init_response" ]]; then
@@ -1289,7 +1356,7 @@ auto_initialize_wallet() {
 
     # Check for error in initwallet response
     local init_error
-    init_error="$(echo "$init_response" | dc_exec -T lnd jq -r '.message // empty' 2>/dev/null)" || true
+    init_error="$(echo "$init_response" | jq -r '.message // empty' 2>/dev/null)" || true
     if [[ -n "$init_error" ]]; then
         print_fail "initwallet error: ${init_error}"
         return 1
@@ -1297,7 +1364,7 @@ auto_initialize_wallet() {
 
     # Extract seed words from the genseed response for display
     local seed_words_raw
-    seed_words_raw="$(echo "$genseed_response" | dc_exec -T lnd jq -r '.cipher_seed_mnemonic[]' 2>/dev/null)" || true
+    seed_words_raw="$(echo "$genseed_response" | jq -r '.cipher_seed_mnemonic[]' 2>/dev/null)" || true
 
     if [[ -z "$seed_words_raw" ]]; then
         print_fail "Could not extract seed words for display."
@@ -1325,7 +1392,10 @@ auto_initialize_wallet() {
 
 # Display the 24-word seed in a polished TUI screen.
 # Reads from the global _AUTO_SEED_WORDS array.
+# Args: $1 - wallet password (optional, displayed if provided)
 show_seed_screen() {
+    local wallet_password="${1:-$_AUTO_WALLET_PASSWORD}"
+
     if [[ ${#_AUTO_SEED_WORDS[@]} -ne 24 ]]; then
         print_warn "No seed to display."
         return
@@ -1371,15 +1441,31 @@ show_seed_screen() {
         " "
 
     echo ""
+    if [[ -n "$wallet_password" ]]; then
+        echo -e "  ${BOLD}Wallet auto-unlock password:${NC} ${ORANGE}${wallet_password}${NC}"
+        echo -e "  ${DIM}(also saved in data/lnd/password.txt)${NC}"
+        echo ""
+    fi
     print_warn "${BOLD}IMPORTANT:${NC} Write these words down and store them safely."
     print_warn "They ${BOLD}CANNOT${NC} be shown again. This is your only backup."
     echo ""
 
-    # Show RTL URL
-    local lan_ip
-    lan_ip="$(get_lan_ip)"
-    echo -e "  RTL web interface: ${BOLD}http://${lan_ip}:3000${NC}"
-    echo ""
+    # Show RTL URL only when enabled, honoring configured bind/port.
+    if [[ -n "${RTL_PASSWORD:-}" ]]; then
+        local lan_ip rtl_bind rtl_port rtl_host
+        lan_ip="$(get_lan_ip)"
+        rtl_bind="${RTL_BIND:-127.0.0.1}"
+        rtl_port="${RTL_PORT:-3000}"
+        rtl_host="$rtl_bind"
+        if [[ "$rtl_bind" == "0.0.0.0" ]]; then
+            rtl_host="$lan_ip"
+        fi
+        echo -e "  RTL web interface: ${BOLD}http://${rtl_host}:${rtl_port}${NC}"
+        echo ""
+    else
+        print_info "RTL web interface is disabled."
+        echo ""
+    fi
     print_info "To change settings or enable SCB backups, use:"
     print_info "Menu > Tools > Setup wizard"
     echo ""

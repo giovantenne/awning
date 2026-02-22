@@ -29,7 +29,7 @@ ARG GID=1000
 # Install stunnel for SSL termination (replaces Nginx container)
 # and netcat for healthcheck
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    stunnel4 openssl netcat-openbsd && rm -rf /var/lib/apt/lists/*
+    stunnel4 openssl netcat-openbsd curl && rm -rf /var/lib/apt/lists/*
 
 # Create user with matching UID/GID
 RUN groupadd -g ${GID} electrs \
@@ -41,7 +41,7 @@ RUN openssl req -x509 -nodes -newkey rsa:4096 \
     -out /etc/stunnel/stunnel.crt \
     -subj "/CN=localhost" -days 3650 \
     && cat /etc/stunnel/stunnel.key /etc/stunnel/stunnel.crt > /etc/stunnel/stunnel.pem \
-    && chmod 644 /etc/stunnel/stunnel.pem \
+    && chmod 600 /etc/stunnel/stunnel.pem \
     && rm /etc/stunnel/stunnel.key /etc/stunnel/stunnel.crt
 
 # stunnel config: SSL on 50002 -> plain Electrs on 50001
@@ -53,7 +53,9 @@ RUN printf 'foreground = yes\npid =\n\n[electrs-ssl]\nclient = no\naccept = 5000
 # Copy the compiled binary and entrypoint
 COPY --from=builder /build/target/release/electrs /usr/local/bin/electrs
 COPY entrypoints/electrs.sh /usr/local/bin/entrypoint.sh
+COPY entrypoints/electrs-healthcheck.sh /usr/local/bin/electrs-healthcheck.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/electrs-healthcheck.sh
 
 USER electrs
 WORKDIR /data
@@ -61,7 +63,7 @@ WORKDIR /data
 EXPOSE 50001 50002 4224
 
 HEALTHCHECK --interval=60s --timeout=10s --start-period=30s --retries=3 \
-    CMD ["/bin/sh", "-c", "/bin/nc -4 -z 127.0.0.1 50001 && /bin/nc -4 -z 127.0.0.1 50002"]
+    CMD ["/usr/local/bin/electrs-healthcheck.sh"]
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["--conf", "/data/electrs.toml"]

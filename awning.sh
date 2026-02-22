@@ -2,7 +2,9 @@
 # Awning v2: Bitcoin + Lightning Node Manager
 # https://github.com/giovantenne/awning
 
-# Strict mode for non-interactive execution
+# Strict mode: -u (error on undefined vars), -o pipefail (propagate pipe errors).
+# Note: -e (errexit) is intentionally omitted because the interactive menu and
+# subcommands must handle errors gracefully without killing the entire script.
 set -uo pipefail
 
 # Resolve project directory (where this script lives)
@@ -29,8 +31,11 @@ load_env_file() {
         key="${BASH_REMATCH[1]}"
         value="${BASH_REMATCH[2]}"
         value="${value%%[[:space:]]#*}"
+        # Strip surrounding double or single quotes
         value="${value%\"}"
         value="${value#\"}"
+        value="${value%\'}"
+        value="${value#\'}"
 
         case "$key" in
             HOST_UID|HOST_GID|BITCOIN_ARCH|LND_ARCH|BITCOIN_CORE_VERSION|LND_VERSION|ELECTRS_VERSION|RTL_VERSION|NODE_ALIAS|BITCOIN_RPC_USER|BITCOIN_RPC_PASSWORD|TOR_CONTROL_PASSWORD|RTL_PASSWORD|SCB_REPO|LND_REST_BIND|LND_REST_PORT|ELECTRS_SSL_BIND|ELECTRS_SSL_PORT|RTL_BIND|RTL_PORT)

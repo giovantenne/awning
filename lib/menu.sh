@@ -19,6 +19,33 @@ show_menu() {
         echo ""
     }
 
+    # Update only the subtitle row (row 3 inside the header box) without
+    # clearing the screen, eliminating visible flicker on status changes.
+    _update_subtitle() {
+        local new_label="$1"
+        local tw
+        tw="$(term_width)"
+        local width=39
+        [[ $tw -lt $((width + 4)) ]] && width=$((tw - 4))
+
+        local subtitle_visible
+        subtitle_visible="$(echo -e "$new_label" | sed 's/\x1b\[[0-9;]*[A-Za-z]//g')"
+        local subtitle_len
+        subtitle_len="$(_display_width "$subtitle_visible")"
+        local sub_padding=$(( (width - subtitle_len) / 2 ))
+        (( sub_padding < 0 )) && sub_padding=0
+
+        # Save cursor, move to row 4 col 1 (subtitle row), overwrite, restore cursor
+        printf '\033[s'
+        tput cup 3 0 2>/dev/null || printf '\033[4;1H'
+        printf '  %b' "$BOX_V"
+        printf '%*s' "$sub_padding" ""
+        printf '%b' "${new_label}"
+        printf '%*s' "$(( width - sub_padding - subtitle_len ))" ""
+        printf '%b' "$BOX_V"
+        printf '\033[u'
+    }
+
     refresh_main_menu() {
         status_label="$(get_status_label 2>/dev/null)" || status_label="${DIM}unknown${NC}"
         render_main_menu "$status_label"
@@ -40,7 +67,7 @@ show_menu() {
             fi
 
             ticks=$((ticks + 1))
-            if (( ticks < 10 )); then
+            if (( ticks < 3 )); then
                 continue
             fi
             ticks=0
@@ -49,8 +76,7 @@ show_menu() {
             next_status_label="$(get_status_label 2>/dev/null)" || next_status_label="${DIM}unknown${NC}"
             if [[ "$next_status_label" != "$status_label" ]]; then
                 status_label="$next_status_label"
-                render_main_menu "$status_label"
-                printf "  %b" "$prompt"
+                _update_subtitle "$status_label"
             fi
         done
 
@@ -617,11 +643,13 @@ menu_bitcoin_cli() {
 
     while true; do
         local cmd
+        local -a cmd_args
         read -r -p "$(echo -e "  ${YELLOW}bitcoin-cli>${NC} ")" cmd || break
         [[ "$cmd" == "exit" || "$cmd" == "quit" ]] && break
         [[ -z "$cmd" ]] && continue
-        # shellcheck disable=SC2086
-        _dc exec -T bitcoin bitcoin-cli -datadir=/data/.bitcoin $cmd 2>/dev/null || true
+        read -r -a cmd_args <<< "$cmd"
+        [[ ${#cmd_args[@]} -eq 0 ]] && continue
+        _dc exec -T bitcoin bitcoin-cli -datadir=/data/.bitcoin "${cmd_args[@]}" 2>/dev/null || true
     done
 }
 
@@ -640,10 +668,12 @@ menu_lncli() {
 
     while true; do
         local cmd
+        local -a cmd_args
         read -r -p "$(echo -e "  ${YELLOW}lncli>${NC} ")" cmd || break
         [[ "$cmd" == "exit" || "$cmd" == "quit" ]] && break
         [[ -z "$cmd" ]] && continue
-        # shellcheck disable=SC2086
-        _dc exec -T lnd lncli --network "${BITCOIN_NETWORK}" $cmd 2>/dev/null || true
+        read -r -a cmd_args <<< "$cmd"
+        [[ ${#cmd_args[@]} -eq 0 ]] && continue
+        _dc exec -T lnd lncli --network "${BITCOIN_NETWORK}" "${cmd_args[@]}" 2>/dev/null || true
     done
 }

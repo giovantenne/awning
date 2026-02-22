@@ -2,7 +2,7 @@
 # Awning v2: Electrs entrypoint
 # Starts stunnel (SSL termination on port 50002) then runs electrs
 
-set -e
+set -euo pipefail
 
 # Start stunnel in background for SSL termination
 # Config has foreground=yes so it doesn't daemonize; we background it here

@@ -12,6 +12,13 @@ RTL_PORT=3000
 BITCOIN_NETWORK="mainnet"
 ADMIN_MACAROON_SUBPATH="data/chain/bitcoin/mainnet/admin.macaroon"
 
+# Timeouts (seconds)
+LND_STABLE_TIMEOUT=90
+LND_API_TIMEOUT=120
+
+# Minimum free disk space for full Bitcoin node (GB)
+REQUIRED_DISK_GB=900
+
 # ============================================================
 # Colors (respects NO_COLOR convention: https://no-color.org/)
 # ============================================================
@@ -391,6 +398,26 @@ check_command() {
 # ============================================================
 awning_path() {
     echo "${AWNING_DIR}/$1"
+}
+
+# ============================================================
+# Architecture detection
+# ============================================================
+
+# Detect CPU architecture and set BITCOIN_ARCH / LND_ARCH.
+# Output: sets global variables DETECTED_BITCOIN_ARCH and DETECTED_LND_ARCH.
+# Returns: 1 on unsupported architecture.
+detect_arch() {
+    local arch
+    arch="$(uname -m)"
+    case "$arch" in
+        x86_64)  DETECTED_BITCOIN_ARCH="x86_64";  DETECTED_LND_ARCH="amd64" ;;
+        aarch64) DETECTED_BITCOIN_ARCH="aarch64"; DETECTED_LND_ARCH="arm64" ;;
+        *)
+            print_fail "Unsupported architecture: $arch"
+            return 1
+            ;;
+    esac
 }
 
 # ============================================================
