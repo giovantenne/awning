@@ -340,20 +340,48 @@ progress_bar() {
 # Spinner animation
 # ============================================================
 # Usage: long_command & spinner $! "Doing something..."
+#        long_command & spinner $! "Building..." /path/to/logfile
+# When a log_file is provided, the last non-empty line is shown
+# below the spinner (dim, truncated to terminal width).
 spinner() {
     local pid=$1
     local message="${2:-Working...}"
+    local log_file="${3:-}"
     local frames=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
     local i=0
+    local has_detail=false
+    local cols
+    cols=$(tput cols 2>/dev/null || echo 80)
 
     while kill -0 "$pid" 2>/dev/null; do
-        printf "\r  [${CYAN}%s${NC}] %s" "${frames[i++ % ${#frames[@]}]}" "$message"
-        sleep 0.1
+        printf "\r  [${CYAN}%s${NC}] %s\033[K" "${frames[i++ % ${#frames[@]}]}" "$message"
+        # Show last log line on a second row if log_file is provided
+        if [[ -n "$log_file" && -f "$log_file" ]]; then
+            local last_line
+            last_line="$(tail -1 "$log_file" 2>/dev/null | tr -d '\r')"
+            if [[ -n "$last_line" ]]; then
+                has_detail=true
+                # Truncate to terminal width minus indent (6 chars)
+                local max_len=$((cols - 6))
+                if [[ ${#last_line} -gt $max_len ]]; then
+                    last_line="${last_line:0:$((max_len - 3))}..."
+                fi
+                printf "\n      ${DIM}%s${NC}\033[K" "$last_line"
+                # Move cursor back up to spinner line
+                printf "\033[1A"
+            fi
+        fi
+        sleep 0.15
     done
 
     wait "$pid"
     local exit_code=$?
-    printf "\r\033[K"  # Clear the line
+
+    # Clear spinner line and detail line (if any)
+    printf "\r\033[K"
+    if [[ "$has_detail" == true ]]; then
+        printf "\n\033[K\033[1A"
+    fi
 
     if [[ $exit_code -eq 0 ]]; then
         print_check "$message"

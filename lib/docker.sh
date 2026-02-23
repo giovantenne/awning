@@ -236,7 +236,7 @@ dc_build_services() {
         padded_svc="$(printf "%-${max_svc_len}s" "$service")"
         _dc build "$service" > "$build_log" 2>&1 &
         local build_pid=$!
-        if ! spinner "$build_pid" "Building ${padded_svc}  (${padded_i}/${total})"; then
+        if ! spinner "$build_pid" "Building ${padded_svc}  (${padded_i}/${total})" "$build_log"; then
             echo ""
             echo -e "  ${DIM}--- Last 30 lines of build output ---${NC}"
             tail -30 "$build_log" | while IFS= read -r line; do
