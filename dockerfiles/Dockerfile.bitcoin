@@ -43,8 +43,8 @@ COPY --from=verifier /tmp/bitcoin-${BITCOIN_CORE_VERSION}/bin/bitcoind /usr/loca
 COPY --from=verifier /tmp/bitcoin-${BITCOIN_CORE_VERSION}/bin/bitcoin-cli /usr/local/bin/
 
 # Create user with matching UID/GID
-RUN groupadd -g ${GID} bitcoin \
-    && useradd -u ${UID} -g ${GID} -m -d /data -s /bin/bash bitcoin
+RUN groupadd -o -g ${GID} bitcoin \
+    && useradd -o -u ${UID} -g ${GID} -m -d /data -s /bin/bash bitcoin
 
 EXPOSE 8332 8333 28332 28333
 

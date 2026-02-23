@@ -54,8 +54,8 @@ COPY entrypoints/lnd.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 # Create user with matching UID/GID
-RUN groupadd -g ${GID} lnd \
-    && useradd -u ${UID} -g ${GID} -m -d /data -s /bin/bash lnd
+RUN groupadd -o -g ${GID} lnd \
+    && useradd -o -u ${UID} -g ${GID} -m -d /data -s /bin/bash lnd
 
 EXPOSE 8080 9735
 
