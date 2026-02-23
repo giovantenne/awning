@@ -945,8 +945,11 @@ step_generate_configs() {
     print_check "Tor control password"
 
     # Process templates
-    local configs_dir
+    local configs_dir templates_dir user_configs_dir
     configs_dir="$(awning_path configs)"
+    templates_dir="${configs_dir}/templates"
+    user_configs_dir="${configs_dir}/user"
+    mkdir -p "$templates_dir" "$user_configs_dir"
 
     # Helper: escape sed replacement metacharacters (|, &, \, newline)
     _sed_escape() {
@@ -964,27 +967,49 @@ step_generate_configs() {
     esc_tor_password="$(_sed_escape "$tor_password")"
     esc_tor_hashed="$(_sed_escape "$tor_hashed")"
 
+    # Append user overrides for text-based config files.
+    # WARNING: invalid overrides can break service startup.
+    _append_user_override() {
+        local target_file="$1"
+        local user_file="$2"
+        local label="$3"
+        if [[ -s "$user_file" ]]; then
+            {
+                echo ""
+                echo "# --- BEGIN user overrides (${label}) ---"
+                cat "$user_file"
+                echo ""
+                echo "# --- END user overrides (${label}) ---"
+            } >> "$target_file"
+            print_warn "${label} includes user overrides (${user_file})"
+        fi
+    }
+
     # bitcoin.conf
     sed "s|{{BITCOIN_RPCAUTH}}|${esc_rpcauth}|g" \
-        "${configs_dir}/bitcoin.conf.template" > "${configs_dir}/bitcoin.conf"
+        "${templates_dir}/bitcoin.conf.template" > "${configs_dir}/bitcoin.conf"
+    _append_user_override "${configs_dir}/bitcoin.conf" "${user_configs_dir}/bitcoin.user.conf" "bitcoin.conf"
     print_check "bitcoin.conf"
 
     # lnd.conf
     sed -e "s|{{BITCOIN_RPC_USER}}|${esc_rpc_user}|g" \
         -e "s|{{BITCOIN_RPC_PASSWORD}}|${esc_rpc_password}|g" \
         -e "s|{{TOR_CONTROL_PASSWORD}}|${esc_tor_password}|g" \
-        "${configs_dir}/lnd.conf.template" > "${configs_dir}/lnd.conf"
+        "${templates_dir}/lnd.conf.template" > "${configs_dir}/lnd.conf"
+    _append_user_override "${configs_dir}/lnd.conf" "${user_configs_dir}/lnd.user.conf" "lnd.conf"
     print_check "lnd.conf"
 
     # electrs.toml
     sed -e "s|{{BITCOIN_RPC_USER}}|${esc_rpc_user}|g" \
         -e "s|{{BITCOIN_RPC_PASSWORD}}|${esc_rpc_password}|g" \
-        "${configs_dir}/electrs.toml.template" > "${configs_dir}/electrs.toml"
+        "${templates_dir}/electrs.toml.template" > "${configs_dir}/electrs.toml"
+    _append_user_override "${configs_dir}/electrs.toml" "${user_configs_dir}/electrs.user.conf" "electrs.toml"
     print_check "electrs.toml"
 
     # torrc
     sed "s|{{TOR_HASHED_PASSWORD}}|${esc_tor_hashed}|g" \
-        "${configs_dir}/torrc.template" > "${configs_dir}/torrc"
+        "${templates_dir}/torrc.template" > "${configs_dir}/torrc"
+    _append_user_override "${configs_dir}/torrc" "${user_configs_dir}/torrc.user.conf" "torrc"
     print_check "torrc"
 
     # rtl.conf (only when RTL is enabled)
@@ -996,7 +1021,12 @@ step_generate_configs() {
         esc_node_alias="$(_sed_escape "$node_alias")"
         sed -e "s|{{RTL_PASSWORD}}|${esc_rtl_password}|g" \
             -e "s|{{NODE_ALIAS}}|${esc_node_alias}|g" \
-            "${configs_dir}/rtl.conf.template" > "${configs_dir}/rtl.conf"
+            "${templates_dir}/rtl.conf.template" > "${configs_dir}/rtl.conf"
+        # rtl.user.conf is a full override (JSON), not an append fragment.
+        if [[ -s "${user_configs_dir}/rtl.user.conf" ]]; then
+            cp "${user_configs_dir}/rtl.user.conf" "${configs_dir}/rtl.conf"
+            print_warn "rtl.conf replaced by user override (${user_configs_dir}/rtl.user.conf)"
+        fi
         # RTL needs the config in its data dir (it writes to it at runtime)
         local rtl_dir rtl_config
         rtl_dir="$(awning_path data/rtl)"

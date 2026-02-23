@@ -36,5 +36,10 @@ data/rtl/*
 # Generated configs (RTL)
 configs/rtl.conf
 
+# Local user overrides for generated configs
+configs/user/*.user.conf
+!configs/user/.gitkeep
+!configs/user/README.md
+
 # OpenCode session data
 .opencode/
