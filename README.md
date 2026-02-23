@@ -16,6 +16,11 @@ On first run, Awning auto-detects your system, fetches the latest software versi
 
 After setup completes, **write down the 24-word recovery seed** — it is shown only once.
 
+<video controls preload="metadata" width="1200">
+  <source src="docs/awning.mp4" type="video/mp4">
+</video>
+
+
 ## Why Awning
 
 - **Single dependency.** Only Docker is required on the host. Nothing else to install or maintain.
@@ -179,6 +184,7 @@ awning/
 │   ├── scb/               # SSH keys and backup repo
 │   └── rtl/               # RTL runtime config
 ├── dockerfiles/           # Dockerfile per service + entrypoints
+├── docs/                  # Documentation assets (README GIFs, images)
 ├── lib/                   # Shell modules
 │   ├── common.sh          # UI, colors, logging, input, validation
 │   ├── docker.sh          # Docker Compose wrappers
