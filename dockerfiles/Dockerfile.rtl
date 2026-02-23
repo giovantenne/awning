@@ -35,8 +35,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Remove the default node user (UID/GID 1000) from the base image,
 # then create the rtl user with the host-matching UID/GID.
 RUN userdel -r node 2>/dev/null; groupdel node 2>/dev/null; \
-    groupadd -g ${GID} rtl \
-    && useradd -u ${UID} -g ${GID} -m -d /data -s /bin/bash rtl
+    groupadd -o -g ${GID} rtl \
+    && useradd -o -u ${UID} -g ${GID} -m -d /data -s /bin/bash rtl
 
 # Copy built application from builder
 COPY --from=builder --chown=rtl:rtl /build /app

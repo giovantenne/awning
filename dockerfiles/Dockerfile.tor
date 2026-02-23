@@ -12,8 +12,8 @@ COPY entrypoints/tor.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 # Align debian-tor user/group to host UID/GID for volume permissions
-RUN groupmod -g ${GID} debian-tor \
-    && usermod -u ${UID} -g ${GID} debian-tor \
+RUN groupmod -o -g ${GID} debian-tor \
+    && usermod -o -u ${UID} -g ${GID} debian-tor \
     && mkdir -p /run/tor \
     && chown -R debian-tor:debian-tor /var/lib/tor /var/log/tor /run/tor
 

@@ -9,8 +9,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     inotify-tools git openssh-client && rm -rf /var/lib/apt/lists/*
 
 # Create user with matching UID/GID
-RUN groupadd -g ${GID} scb \
-    && useradd -u ${UID} -g ${GID} -m -d /data -s /bin/bash scb
+RUN groupadd -o -g ${GID} scb \
+    && useradd -o -u ${UID} -g ${GID} -m -d /data -s /bin/bash scb
 
 COPY entrypoints/scb.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh

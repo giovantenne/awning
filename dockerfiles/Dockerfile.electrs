@@ -32,14 +32,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     stunnel4 openssl netcat-openbsd curl && rm -rf /var/lib/apt/lists/*
 
 # Create user with matching UID/GID
-RUN groupadd -g ${GID} electrs \
-    && useradd -u ${UID} -g ${GID} -m -d /data -s /bin/bash electrs
+RUN groupadd -o -g ${GID} electrs \
+    && useradd -o -u ${UID} -g ${GID} -m -d /data -s /bin/bash electrs
 
-# Generate self-signed certificate for SSL termination
+# Generate self-signed certificate for SSL termination (with SAN for modern clients)
 RUN openssl req -x509 -nodes -newkey rsa:4096 \
     -keyout /etc/stunnel/stunnel.key \
     -out /etc/stunnel/stunnel.crt \
-    -subj "/CN=localhost" -days 3650 \
+    -subj "/CN=localhost" -days 825 \
+    -addext "subjectAltName=DNS:localhost,DNS:electrs,IP:127.0.0.1" \
     && cat /etc/stunnel/stunnel.key /etc/stunnel/stunnel.crt > /etc/stunnel/stunnel.pem \
     && chown electrs:electrs /etc/stunnel/stunnel.pem \
     && chmod 600 /etc/stunnel/stunnel.pem \

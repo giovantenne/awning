@@ -19,9 +19,10 @@ FALLBACK_RTL_VERSION="0.15.8"
 _env_set() {
     local file="$1" key="$2" value="$3"
     local found=0
-    local tmpfile="${file}.tmp.$$"
+    local tmpfile
 
     if [[ -f "$file" ]]; then
+        tmpfile="$(mktemp "${file}.tmp.XXXXXX")"
         while IFS= read -r line || [[ -n "$line" ]]; do
             if [[ "$line" == "${key}="* ]]; then
                 echo "${key}=${value}"
@@ -30,16 +31,48 @@ _env_set() {
                 echo "$line"
             fi
         done < "$file" > "$tmpfile"
-        mv "$tmpfile" "$file"
-    fi
 
-    if [[ "$found" -eq 0 ]]; then
+        # Append if key was not found, before the atomic mv
+        if [[ "$found" -eq 0 ]]; then
+            echo "${key}=${value}" >> "$tmpfile"
+        fi
+        mv "$tmpfile" "$file"
+    else
         echo "${key}=${value}" >> "$file"
     fi
 }
 
+maybe_require_first_run_disclaimer() {
+    local env_file
+    env_file="$(awning_path .env)"
+
+    # Only show on first setup when no configuration exists yet.
+    [[ -f "$env_file" ]] && return 0
+
+    clear
+    draw_header "IMPORTANT DISCLAIMER" "Explicit acceptance required"
+    echo ""
+    echo -e "  This software configures and runs a Bitcoin + Lightning node."
+    echo -e "  You are solely responsible for security, backups, and funds."
+    echo -e "  Use at your own risk: software bugs, hardware failures,"
+    echo -e "  or misconfiguration may cause data loss or financial loss."
+    echo -e "  Full disclaimer: ${UNDERLINE}https://github.com/giovantenne/awning/blob/master/DISCLAIMER.md${NC}"
+    echo ""
+    echo -e "  Type ${BOLD}I ACCEPT${NC} to continue:"
+
+    local answer
+    read -r -p "$(echo -e "  ${YELLOW}>${NC} ")" answer < /dev/tty
+    if [[ "$answer" != "I ACCEPT" ]]; then
+        print_warn "Disclaimer not accepted. Setup aborted."
+        return 1
+    fi
+
+    return 0
+}
+
 run_setup() {
     local ignore_disk_space="${1:-0}"
+    maybe_require_first_run_disclaimer || return 1
     draw_header "AWNING SETUP" "Bitcoin + Lightning Node"
 
     step_prerequisites "$ignore_disk_space"
@@ -68,6 +101,7 @@ run_setup() {
 run_auto_setup() {
     local ignore_disk_space="${1:-0}"
     local AUTO_SETUP_MODE=1
+    maybe_require_first_run_disclaimer || return 1
     clear
     draw_header "AWNING FIRST SETUP" "Bitcoin + Lightning Node"
 
@@ -95,8 +129,10 @@ run_auto_setup() {
     tmp_electrs_ver="$(mktemp /tmp/awning_electrs_ver.XXXXXX)"
     tmp_rtl_ver="$(mktemp /tmp/awning_rtl_ver.XXXXXX)"
 
-    # Ensure temp files are cleaned up on exit/error
-    trap 'rm -f "$tmp_btc_ver" "$tmp_lnd_ver" "$tmp_electrs_ver" "$tmp_rtl_ver"; _cleanup_github_cache' EXIT
+    # Ensure temp files are cleaned up on exit/error (preserve existing traps)
+    local _prev_trap
+    _prev_trap="$(trap -p EXIT | sed "s/^trap -- '//;s/' EXIT$//" )" || true
+    trap 'rm -f "$tmp_btc_ver" "$tmp_lnd_ver" "$tmp_electrs_ver" "$tmp_rtl_ver"; _cleanup_github_cache; '"${_prev_trap}" EXIT
 
     fetch_latest_github_version "bitcoin/bitcoin" > "$tmp_btc_ver" 2>/dev/null &
     local pid_btc=$!
@@ -107,18 +143,25 @@ run_auto_setup() {
     fetch_latest_github_version "Ride-The-Lightning/RTL" > "$tmp_rtl_ver" 2>/dev/null &
     local pid_rtl=$!
 
-    # Wait for all fetches
-    wait "$pid_btc" 2>/dev/null || true
-    wait "$pid_lnd" 2>/dev/null || true
-    wait "$pid_electrs" 2>/dev/null || true
-    wait "$pid_rtl" 2>/dev/null || true
+    # Wait for all fetches and track failures
+    local fetch_failures=0
+    wait "$pid_btc" 2>/dev/null || fetch_failures=$((fetch_failures + 1))
+    wait "$pid_lnd" 2>/dev/null || fetch_failures=$((fetch_failures + 1))
+    wait "$pid_electrs" 2>/dev/null || fetch_failures=$((fetch_failures + 1))
+    wait "$pid_rtl" 2>/dev/null || fetch_failures=$((fetch_failures + 1))
 
     btc_version="$(cat "$tmp_btc_ver" 2>/dev/null)" || true
     lnd_version="$(cat "$tmp_lnd_ver" 2>/dev/null)" || true
     electrs_version="$(cat "$tmp_electrs_ver" 2>/dev/null)" || true
     rtl_version="$(cat "$tmp_rtl_ver" 2>/dev/null)" || true
     rm -f "$tmp_btc_ver" "$tmp_lnd_ver" "$tmp_electrs_ver" "$tmp_rtl_ver"
-    trap - EXIT
+    # Restore previous EXIT trap (or clear if none existed)
+    if [[ -n "$_prev_trap" ]]; then
+        # shellcheck disable=SC2064  # Intentional: restore previously captured trap
+        trap "${_prev_trap}" EXIT
+    else
+        trap - EXIT
+    fi
     _cleanup_github_cache
 
     # Fallback to constants if fetch failed
@@ -126,6 +169,10 @@ run_auto_setup() {
     lnd_version="${lnd_version:-$FALLBACK_LND_VERSION}"
     electrs_version="${electrs_version:-$FALLBACK_ELECTRS_VERSION}"
     rtl_version="${rtl_version:-$FALLBACK_RTL_VERSION}"
+
+    if [[ "$fetch_failures" -gt 0 ]]; then
+        print_warn "Could not fetch ${fetch_failures} version(s) from GitHub, using fallback defaults"
+    fi
 
     print_check "Bitcoin Core ${btc_version}"
     print_check "LND ${lnd_version}"
@@ -140,18 +187,18 @@ run_auto_setup() {
         "Bitcoin Core     ${BOLD}${btc_version}${NC}" \
         "LND              ${BOLD}${lnd_version}${NC}" \
         "Electrs          ${BOLD}${electrs_version}${NC}" \
-        "RTL              ${BOLD}${rtl_version}${NC} (LAN: 0.0.0.0:3000)" \
-        "SCB              ${DIM}disabled${NC}"
+        "RTL              ${BOLD}${rtl_version}${NC}" \
+        "SCB              ${DIM}Static Channel Backup disabled${NC}"
     echo ""
+    print_info "Settings and channel backup can be changed later from Menu > Tools > Setup wizard, or now by typing ${BOLD}w${NC}."
 
     # --- Auto-generate RTL password (non-interactive) ---
     local rtl_password
     rtl_password="$(generate_password 16)"
-    echo ""
 
     # --- Choice prompt: Enter = auto, w = full wizard ---
     local choice
-    read -r -p "$(echo -e "  Press ${BOLD}Enter${NC} to start, or type ${BOLD}'w'${NC} for the advanced setup wizard: ")" choice < /dev/tty
+    read -r -p "$(echo -e "  Press ${BOLD}Enter${NC} to start, or type ${BOLD}'w'${NC} now for the advanced setup wizard: ")" choice < /dev/tty
 
     if [[ "$choice" == "w" || "$choice" == "W" ]]; then
         run_setup "$ignore_disk_space"
@@ -700,8 +747,9 @@ step_scb_config() {
                 ssh-keygen -t ed25519 -f "$key_priv" -N "" -C "scb@awning" &>/dev/null
             else
                 # Generate via Docker if ssh-keygen not available on host
-                _docker run --rm -v "${scb_ssh_dir}:/keys" debian:bookworm-slim \
-                    bash -c "apt-get update -qq && apt-get install -y -qq openssh-client >/dev/null 2>&1 && ssh-keygen -t ed25519 -f /keys/id_ed25519 -N '' -C 'scb@awning' && chown $(id -u):$(id -g) /keys/id_ed25519 /keys/id_ed25519.pub" &>/dev/null
+                _docker run --rm -e HOST_UID="$(id -u)" -e HOST_GID="$(id -g)" \
+                    -v "${scb_ssh_dir}:/keys" debian:bookworm-slim \
+                    bash -c 'apt-get update -qq && apt-get install -y -qq openssh-client >/dev/null 2>&1 && ssh-keygen -t ed25519 -f /keys/id_ed25519 -N "" -C "scb@awning" && chown "$HOST_UID:$HOST_GID" /keys/id_ed25519 /keys/id_ed25519.pub' &>/dev/null
             fi
             print_check "SSH key generated"
         fi
@@ -900,26 +948,42 @@ step_generate_configs() {
     local configs_dir
     configs_dir="$(awning_path configs)"
 
+    # Helper: escape sed replacement metacharacters (|, &, \, newline)
+    _sed_escape() {
+        local s="$1"
+        s="${s//\\/\\\\}"
+        s="${s//|/\\|}"
+        s="${s//&/\\&}"
+        printf '%s' "$s"
+    }
+
+    local esc_rpcauth esc_rpc_user esc_rpc_password esc_tor_password esc_tor_hashed
+    esc_rpcauth="$(_sed_escape "$rpcauth_line")"
+    esc_rpc_user="$(_sed_escape "$rpc_user")"
+    esc_rpc_password="$(_sed_escape "$rpc_password")"
+    esc_tor_password="$(_sed_escape "$tor_password")"
+    esc_tor_hashed="$(_sed_escape "$tor_hashed")"
+
     # bitcoin.conf
-    sed "s|{{BITCOIN_RPCAUTH}}|${rpcauth_line}|g" \
+    sed "s|{{BITCOIN_RPCAUTH}}|${esc_rpcauth}|g" \
         "${configs_dir}/bitcoin.conf.template" > "${configs_dir}/bitcoin.conf"
     print_check "bitcoin.conf"
 
     # lnd.conf
-    sed -e "s|{{BITCOIN_RPC_USER}}|${rpc_user}|g" \
-        -e "s|{{BITCOIN_RPC_PASSWORD}}|${rpc_password}|g" \
-        -e "s|{{TOR_CONTROL_PASSWORD}}|${tor_password}|g" \
+    sed -e "s|{{BITCOIN_RPC_USER}}|${esc_rpc_user}|g" \
+        -e "s|{{BITCOIN_RPC_PASSWORD}}|${esc_rpc_password}|g" \
+        -e "s|{{TOR_CONTROL_PASSWORD}}|${esc_tor_password}|g" \
         "${configs_dir}/lnd.conf.template" > "${configs_dir}/lnd.conf"
     print_check "lnd.conf"
 
     # electrs.toml
-    sed -e "s|{{BITCOIN_RPC_USER}}|${rpc_user}|g" \
-        -e "s|{{BITCOIN_RPC_PASSWORD}}|${rpc_password}|g" \
+    sed -e "s|{{BITCOIN_RPC_USER}}|${esc_rpc_user}|g" \
+        -e "s|{{BITCOIN_RPC_PASSWORD}}|${esc_rpc_password}|g" \
         "${configs_dir}/electrs.toml.template" > "${configs_dir}/electrs.toml"
     print_check "electrs.toml"
 
     # torrc
-    sed "s|{{TOR_HASHED_PASSWORD}}|${tor_hashed}|g" \
+    sed "s|{{TOR_HASHED_PASSWORD}}|${esc_tor_hashed}|g" \
         "${configs_dir}/torrc.template" > "${configs_dir}/torrc"
     print_check "torrc"
 
@@ -927,8 +991,11 @@ step_generate_configs() {
     if [[ -n "${RTL_PASSWORD:-}" ]]; then
         local node_alias
         node_alias="${NODE_ALIAS:-AwningNode}"
-        sed -e "s|{{RTL_PASSWORD}}|${RTL_PASSWORD}|g" \
-            -e "s|{{NODE_ALIAS}}|${node_alias}|g" \
+        local esc_rtl_password esc_node_alias
+        esc_rtl_password="$(_sed_escape "${RTL_PASSWORD}")"
+        esc_node_alias="$(_sed_escape "$node_alias")"
+        sed -e "s|{{RTL_PASSWORD}}|${esc_rtl_password}|g" \
+            -e "s|{{NODE_ALIAS}}|${esc_node_alias}|g" \
             "${configs_dir}/rtl.conf.template" > "${configs_dir}/rtl.conf"
         # RTL needs the config in its data dir (it writes to it at runtime)
         local rtl_dir rtl_config
@@ -1185,7 +1252,7 @@ wait_for_lnd_api() {
     while (( elapsed < timeout_s )); do
         local response
         response="$(dc_exec -T lnd sh -c \
-            'curl -sf --cacert /data/.lnd/tls.cert https://localhost:8080/v1/state 2>/dev/null' \
+            'curl -sf --max-time 10 --connect-timeout 5 --cacert /data/.lnd/tls.cert https://localhost:8080/v1/state 2>/dev/null' \
         )" || true
 
         if echo "$response" | grep -q "NON_EXISTING" 2>/dev/null; then
@@ -1291,7 +1358,7 @@ auto_initialize_wallet() {
     # Step 1: Generate seed via /v1/genseed
     local genseed_response
     genseed_response="$(dc_exec -T lnd sh -c \
-        'curl -s --cacert /data/.lnd/tls.cert https://localhost:8080/v1/genseed' \
+        'curl -s --max-time 30 --connect-timeout 10 --cacert /data/.lnd/tls.cert https://localhost:8080/v1/genseed' \
     )" || true
 
     if [[ -z "$genseed_response" ]]; then
@@ -1317,14 +1384,14 @@ auto_initialize_wallet() {
 
     # Step 2: Initialize wallet with seed + password via /v1/initwallet
     local password_b64
-    password_b64="$(echo -n "$lnd_password" | base64)"
+    password_b64="$(printf '%s' "$lnd_password" | base64)"
 
     local init_payload
     init_payload="{\"wallet_password\":\"${password_b64}\",\"cipher_seed_mnemonic\":${seed_array}}"
 
     local init_response
-    init_response="$(echo "$init_payload" | dc_exec -T lnd sh -c \
-        'curl -s --cacert /data/.lnd/tls.cert https://localhost:8080/v1/initwallet -d @-' \
+    init_response="$(printf '%s' "$init_payload" | dc_exec -T lnd sh -c \
+        'curl -s --max-time 30 --cacert /data/.lnd/tls.cert https://localhost:8080/v1/initwallet -d @-' \
     )" || true
 
     if [[ -z "$init_response" ]]; then

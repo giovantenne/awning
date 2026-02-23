@@ -1,5 +1,6 @@
 # Environment (contains passwords)
 .env
+.env.test
 
 # Generated configs (created from templates by setup)
 configs/bitcoin.conf
@@ -9,6 +10,9 @@ configs/torrc
 
 # Build logs
 .build.log
+
+# Runtime lock file
+.lock
 
 # Runtime data
 data/bitcoin/*
