@@ -1077,7 +1077,8 @@ generate_rpcauth() {
     local user="$1"
     local password="$2"
 
-    local salt hmac
+    local salt hmac build_log
+    build_log="$(awning_path .build.log)"
 
     if command -v openssl &>/dev/null; then
         salt="$(openssl rand -hex 16)"
@@ -1085,7 +1086,7 @@ generate_rpcauth() {
     else
         # Run via Docker using Python (no host Python dependency)
         local result
-        result="$(_docker run --rm -i python:3-slim python3 - "$password" <<'PY'
+        result="$(_docker run --rm -i python:3-slim python3 - "$password" 2>>"$build_log" <<'PY'
 import hashlib, hmac as h, os, sys
 password = sys.argv[1].encode()
 salt = os.urandom(16).hex()
@@ -1112,8 +1113,9 @@ PY
 # Returns: 1 on failure
 generate_tor_hash() {
     local password="$1"
-    local hash
-    hash="$(_docker run --rm -i python:3-slim python3 - "$password" <<'PY'
+    local hash build_log
+    build_log="$(awning_path .build.log)"
+    hash="$(_docker run --rm -i python:3-slim python3 - "$password" 2>>"$build_log" <<'PY'
 import hashlib, os, binascii, sys
 password = sys.argv[1].encode()
 indicator = 96
