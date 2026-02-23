@@ -1362,8 +1362,6 @@ auto_initialize_wallet() {
     printf '%s\n' "$lnd_password" > "$password_file"
     chmod 600 "$password_file"
 
-    echo -e "  ${BOLD}${CYAN}Initializing LND wallet...${NC}"
-
     # Wait for LND container to stabilize
     if ! wait_for_lnd_stable; then
         print_fail "LND container is not stable (still restarting)."
