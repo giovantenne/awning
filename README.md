@@ -16,9 +16,11 @@ On first run, Awning auto-detects your system, fetches the latest software versi
 
 After setup completes, **write down the 24-word recovery seed** — it is shown only once.
 
-<video controls preload="metadata" width="1200">
-  <source src="docs/awning.mp4" type="video/mp4">
-</video>
+
+
+https://github.com/user-attachments/assets/669d2f28-308e-44c9-997a-75a4cfcd9ff4
+
+
 
 
 ## Why Awning
