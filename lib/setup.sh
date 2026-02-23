@@ -935,14 +935,36 @@ step_generate_configs() {
     _env_set "$env_file" "TOR_CONTROL_PASSWORD" "$tor_password"
 
     # Generate Bitcoin rpcauth line (via Docker if openssl not on host)
-    local rpcauth_line
-    rpcauth_line="$(generate_rpcauth "$rpc_user" "$rpc_password")"
-    print_check "Bitcoin RPC credentials"
+    local rpcauth_line rpcauth_tmp
+    rpcauth_tmp="$(mktemp /tmp/awning_rpcauth.XXXXXX)"
+    generate_rpcauth "$rpc_user" "$rpc_password" > "$rpcauth_tmp" &
+    local rpcauth_pid=$!
+    if ! spinner "$rpcauth_pid" "Bitcoin RPC credentials"; then
+        rm -f "$rpcauth_tmp"
+        return 1
+    fi
+    rpcauth_line="$(cat "$rpcauth_tmp" 2>/dev/null)"
+    rm -f "$rpcauth_tmp"
+    if [[ -z "$rpcauth_line" ]]; then
+        print_fail "Failed to generate RPC auth credentials"
+        return 1
+    fi
 
     # Generate Tor hashed password (via Docker if python3 not on host)
-    local tor_hashed
-    tor_hashed="$(generate_tor_hash "$tor_password")"
-    print_check "Tor control password"
+    local tor_hashed tor_hash_tmp
+    tor_hash_tmp="$(mktemp /tmp/awning_tor_hash.XXXXXX)"
+    generate_tor_hash "$tor_password" > "$tor_hash_tmp" &
+    local tor_hash_pid=$!
+    if ! spinner "$tor_hash_pid" "Tor control password"; then
+        rm -f "$tor_hash_tmp"
+        return 1
+    fi
+    tor_hashed="$(cat "$tor_hash_tmp" 2>/dev/null)"
+    rm -f "$tor_hash_tmp"
+    if [[ -z "$tor_hashed" ]]; then
+        print_fail "Failed to generate Tor password hash"
+        return 1
+    fi
 
     # Process templates
     local configs_dir templates_dir user_configs_dir
