@@ -187,16 +187,14 @@ run_auto_setup() {
         "Bitcoin Core     ${BOLD}${btc_version}${NC}" \
         "LND              ${BOLD}${lnd_version}${NC}" \
         "Electrs          ${BOLD}${electrs_version}${NC}" \
-        "RTL              ${BOLD}${rtl_version}${NC} (LAN: 0.0.0.0:3000)" \
+        "RTL              ${BOLD}${rtl_version}${NC}" \
         "SCB              ${DIM}Static Channel Backup disabled${NC}"
     echo ""
     print_info "Settings and channel backup can be changed later from Menu > Tools > Setup wizard, or now by typing ${BOLD}w${NC}."
-    echo ""
 
     # --- Auto-generate RTL password (non-interactive) ---
     local rtl_password
     rtl_password="$(generate_password 16)"
-    echo ""
 
     # --- Choice prompt: Enter = auto, w = full wizard ---
     local choice
