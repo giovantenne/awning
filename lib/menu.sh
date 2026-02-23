@@ -249,7 +249,7 @@ menu_system() {
             fi
             menu_pause
             ;;
-        4)  menu_update ;;
+        4)  menu_rebuild ;;
         0|"") ;;
         *)  print_warn "Invalid choice"; sleep 0.5 ;;
     esac
@@ -345,8 +345,8 @@ menu_update_awning() {
     exit 0
 }
 
-# --- Update (rebuild) ---
-menu_update() {
+# --- Rebuild ---
+menu_rebuild() {
     clear 2>/dev/null || true
     draw_header "REBUILD" "Build & Restart Services"
     echo ""

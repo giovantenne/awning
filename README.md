@@ -56,7 +56,7 @@ sudo apt-get install -y docker.io docker-compose-v2 git
 ./awning.sh setup           Run the setup wizard
 ./awning.sh start|stop      Start or stop all services
 ./awning.sh restart [svc]   Restart all or selected services
-./awning.sh update          Rebuild and restart all services
+./awning.sh rebuild         Rebuild and restart all services
 ./awning.sh status          Dashboard with sync progress
 ./awning.sh logs [svc]      Follow service logs
 ./awning.sh connections     Tor addresses, LND connect URIs
@@ -139,7 +139,7 @@ Generated service configs are rebuilt by setup. For persistent custom overrides,
 
 **Warning:** `.user.conf` overrides are loaded as-is. Invalid or conflicting options can prevent services from starting and may lead to data loss or fund loss.
 
-To upgrade versions: edit `.env`, then run `./awning.sh update`.
+To upgrade versions: edit `.env`, then run `./awning.sh rebuild`.
 
 ## Portability
 

@@ -205,11 +205,11 @@ main() {
         build)
             dc_build_services "${@:2}"
             ;;
-        update)
+        rebuild)
             dc_down_with_spinner
             dc_build_services
             dc_start_services
-            print_check "Update complete"
+            print_check "Rebuild complete"
             ;;
 
         # Monitoring
@@ -277,7 +277,7 @@ show_help() {
     echo -e "    ${CYAN}stop${NC}            Stop all services"
     echo -e "    ${CYAN}restart${NC} [svc]   Restart services"
     echo -e "    ${CYAN}build${NC} [svc]     Build Docker images"
-    echo -e "    ${CYAN}update${NC}          Rebuild and restart all"
+    echo -e "    ${CYAN}rebuild${NC}         Rebuild and restart all"
     echo ""
     echo -e "  ${BOLD}Monitoring:${NC}"
     echo -e "    ${CYAN}status${NC}          Service status and sync progress"
