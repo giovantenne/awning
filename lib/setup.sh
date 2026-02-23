@@ -42,8 +42,37 @@ _env_set() {
     fi
 }
 
+maybe_require_first_run_disclaimer() {
+    local env_file
+    env_file="$(awning_path .env)"
+
+    # Only show on first setup when no configuration exists yet.
+    [[ -f "$env_file" ]] && return 0
+
+    clear
+    draw_header "IMPORTANT DISCLAIMER" "Explicit acceptance required"
+    echo ""
+    echo -e "  This software configures and runs a Bitcoin + Lightning node."
+    echo -e "  You are solely responsible for security, backups, and funds."
+    echo -e "  Use at your own risk: software bugs, hardware failures,"
+    echo -e "  or misconfiguration may cause data loss or financial loss."
+    echo -e "  Full disclaimer: ${UNDERLINE}https://github.com/giovantenne/awning/blob/master/DISCLAIMER.md${NC}"
+    echo ""
+    echo -e "  Type ${BOLD}I ACCEPT${NC} to continue:"
+
+    local answer
+    read -r -p "$(echo -e "  ${YELLOW}>${NC} ")" answer < /dev/tty
+    if [[ "$answer" != "I ACCEPT" ]]; then
+        print_warn "Disclaimer not accepted. Setup aborted."
+        return 1
+    fi
+
+    return 0
+}
+
 run_setup() {
     local ignore_disk_space="${1:-0}"
+    maybe_require_first_run_disclaimer || return 1
     draw_header "AWNING SETUP" "Bitcoin + Lightning Node"
 
     step_prerequisites "$ignore_disk_space"
@@ -72,6 +101,7 @@ run_setup() {
 run_auto_setup() {
     local ignore_disk_space="${1:-0}"
     local AUTO_SETUP_MODE=1
+    maybe_require_first_run_disclaimer || return 1
     clear
     draw_header "AWNING FIRST SETUP" "Bitcoin + Lightning Node"
 
