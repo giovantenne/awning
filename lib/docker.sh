@@ -396,12 +396,12 @@ bitcoin_cli() {
 }
 
 lncli() {
-    dc_exec -T lnd lncli --network "${BITCOIN_NETWORK}" "$@"
+    dc_exec -T lnd lncli --lnddir=/data/.lnd --network "${BITCOIN_NETWORK}" "$@"
 }
 
 # Interactive exec (for wallet creation, manual CLI)
 lncli_interactive() {
-    dc_exec lnd lncli --network "${BITCOIN_NETWORK}" "$@"
+    dc_exec lnd lncli --lnddir=/data/.lnd --network "${BITCOIN_NETWORK}" "$@"
 }
 
 # Get the state status of a container (running, exited, restarting, etc.)

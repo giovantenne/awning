@@ -188,7 +188,9 @@ run_auto_setup() {
         "LND              ${BOLD}${lnd_version}${NC}" \
         "Electrs          ${BOLD}${electrs_version}${NC}" \
         "RTL              ${BOLD}${rtl_version}${NC} (LAN: 0.0.0.0:3000)" \
-        "SCB              ${DIM}disabled${NC}"
+        "SCB              ${DIM}Static Channel Backup disabled${NC}"
+    echo ""
+    print_info "Settings and channel backup can be changed later from Menu > Tools > Setup wizard, or now by typing ${BOLD}w${NC}."
     echo ""
 
     # --- Auto-generate RTL password (non-interactive) ---
@@ -198,7 +200,7 @@ run_auto_setup() {
 
     # --- Choice prompt: Enter = auto, w = full wizard ---
     local choice
-    read -r -p "$(echo -e "  Press ${BOLD}Enter${NC} to start, or type ${BOLD}'w'${NC} for the advanced setup wizard: ")" choice < /dev/tty
+    read -r -p "$(echo -e "  Press ${BOLD}Enter${NC} to start, or type ${BOLD}'w'${NC} now for the advanced setup wizard: ")" choice < /dev/tty
 
     if [[ "$choice" == "w" || "$choice" == "W" ]]; then
         run_setup "$ignore_disk_space"

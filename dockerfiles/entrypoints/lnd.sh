@@ -13,5 +13,7 @@ echo "  Node alias:  ${NODE_ALIAS:-awning}"
 echo "  Tor target:  ${CONTAINER_IP}"
 
 exec lnd \
+    --lnddir=/data/.lnd \
+    --configfile=/data/.lnd/lnd.conf \
     --tor.targetipaddress="${CONTAINER_IP}" \
     --alias="${NODE_ALIAS:-awning}"
