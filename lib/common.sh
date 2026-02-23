@@ -17,7 +17,7 @@ LND_STABLE_TIMEOUT=90
 LND_API_TIMEOUT=120
 
 # Minimum free disk space for full Bitcoin node (GB)
-REQUIRED_DISK_GB=900
+REQUIRED_DISK_GB=800
 
 # ============================================================
 # Colors (respects NO_COLOR convention: https://no-color.org/)
@@ -427,7 +427,19 @@ validate_password() {
 # ============================================================
 generate_password() {
     local length="${1:-24}"
-    tr -dc 'A-Za-z0-9' < /dev/urandom | head -c "$length"
+    # Avoid SIGPIPE warnings ("tr: write error: Broken pipe") under set -o pipefail
+    # by filtering a finite random chunk, then slicing in bash.
+    local bytes="$(( length * 4 ))"
+    local candidate
+
+    while :; do
+        candidate="$(head -c "$bytes" /dev/urandom | tr -dc 'A-Za-z0-9')"
+        if [[ ${#candidate} -ge "$length" ]]; then
+            printf '%s' "${candidate:0:length}"
+            return 0
+        fi
+        bytes=$(( bytes * 2 ))
+    done
 }
 
 # ============================================================
