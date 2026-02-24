@@ -12,7 +12,7 @@ show_menu() {
         echo -e "  ${BOLD}${WHITE}1)${NC} Status        ${DIM}Dashboard with sync progress${NC}"
         echo -e "  ${BOLD}${WHITE}2)${NC} Logs          ${DIM}View service logs${NC}"
         echo -e "  ${BOLD}${WHITE}3)${NC} Connections   ${DIM}Tor addresses, LND connect URI${NC}"
-        echo -e "  ${BOLD}${WHITE}4)${NC} Wallet        ${DIM}Create, unlock, balances${NC}"
+        echo -e "  ${BOLD}${WHITE}4)${NC} Wallet        ${DIM}Balances, addresses, Zeus connect${NC}"
         echo -e "  ${BOLD}${WHITE}5)${NC} Tools         ${DIM}CLI and backup utilities${NC}"
         echo -e "  ${BOLD}${WHITE}6)${NC} System        ${DIM}Start, stop, restart, rebuild${NC}"
         echo -e "  ${BOLD}${WHITE}0)${NC} Exit"
