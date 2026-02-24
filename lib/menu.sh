@@ -9,6 +9,14 @@ show_menu() {
         clear 2>/dev/null || true
         draw_header "AWNING v$(get_awning_version)" "${status_label}"
         echo ""
+        local _scb_status _scb_health
+        _scb_status="$(dc_get_status scb 2>/dev/null)" || _scb_status=""
+        _scb_health="$(dc_get_health scb 2>/dev/null)" || _scb_health=""
+        if [[ -z "${SCB_REPO:-}" ]] || [[ "$_scb_status" != "running" ]] || [[ "$_scb_health" != "healthy" ]]; then
+            echo -e "  ${ORANGE}⚠ Channel backups (SCB) are not enabled."
+            echo -e "    Enable them via Tools > Setup Wizard${NC}"
+            echo ""
+        fi
         echo -e "  ${BOLD}${WHITE}1)${NC} Status        ${DIM}Dashboard with sync progress${NC}"
         echo -e "  ${BOLD}${WHITE}2)${NC} Logs          ${DIM}View service logs${NC}"
         echo -e "  ${BOLD}${WHITE}3)${NC} Connections   ${DIM}Tor addresses, LND connect URI${NC}"
@@ -606,7 +614,7 @@ set -e
 SCB_SOURCE="/lnd/data/chain/bitcoin/mainnet/channel.backup"
 BACKUP_DIR="/data/backups"
 
-if [[ ! -f "${SCB_SOURCE}" ]]; then
+if [ ! -f "${SCB_SOURCE}" ]; then
     echo "__ERR__:channel.backup_not_found"
     exit 2
 fi
@@ -637,10 +645,13 @@ EOF
                         print_warn "Backup command completed, but no status marker was returned"
                     fi
                 else
-                    print_fail "Manual backup failed"
-                    sed -n '1,80p' "${trigger_log}" | while IFS= read -r line; do
-                        echo "  $line"
-                    done
+                    if grep -q "__ERR__:channel.backup_not_found" "${trigger_log}"; then
+                        print_fail "Backup file not found"
+                        print_info "LND has not created channel.backup yet — wait for LND to sync"
+                    else
+                        print_fail "Manual backup failed"
+                        print_info "Check SCB logs for details (option 2)"
+                    fi
                 fi
                 rm -f "${trigger_log}"
             else
