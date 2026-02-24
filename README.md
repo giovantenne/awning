@@ -1,4 +1,4 @@
-# <img src="https://awning-node.github.io/awning.png" alt="Awning" width="50" height="50" align="absmiddle" /> Awning
+# <img src="https://awning-node.pages.dev/awning.png" alt="Awning" width="50" height="50" align="absmiddle" /> Awning
 
 [![Language](https://img.shields.io/badge/Language-Bash-121011.svg?logo=gnu-bash&logoColor=white)](https://www.gnu.org/software/bash/) [![Runtime](https://img.shields.io/badge/Runtime-Docker-2496ED.svg?logo=docker&logoColor=white)](https://www.docker.com/) [![Network](https://img.shields.io/badge/Network-Tor-7D4698.svg?logo=torproject&logoColor=white)](https://www.torproject.org/) [![Bitcoin](https://img.shields.io/badge/Bitcoin-Core-F7931A.svg?logo=bitcoin&logoColor=white)](https://github.com/bitcoin/bitcoin) [![Lightning](https://img.shields.io/badge/Lightning-LND-1E90FF.svg)](https://github.com/lightningnetwork/lnd) [![License](https://img.shields.io/github/license/giovantenne/awning.svg)](LICENSE)
 
@@ -7,6 +7,8 @@
 A portable, TUI-first Bitcoin + Lightning node stack.
 
 Only requires Docker. No Python, Node.js, Go, or other runtimes. One directory, one command, one dependency.
+
+Website: [awning-node.pages.dev](https://awning-node.pages.dev)
 
 ## 🚀 Quick Start
 
@@ -22,11 +24,9 @@ After setup completes, **write down the 24-word recovery seed** — it is shown 
 
 
 
-
-
-https://github.com/user-attachments/assets/8ae1fbd2-9298-48f7-81fc-df09a8b06f3f
-
-
+<div align="center">
+  <video src="assets/8ae1fbd2-9298-48f7-81fc-df09a8b06f3f" controls></video>
+</div>
 
 
 
