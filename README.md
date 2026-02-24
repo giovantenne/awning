@@ -18,7 +18,11 @@ After setup completes, **write down the 24-word recovery seed** — it is shown 
 
 
 
-https://github.com/user-attachments/assets/669d2f28-308e-44c9-997a-75a4cfcd9ff4
+
+
+https://github.com/user-attachments/assets/8ae1fbd2-9298-48f7-81fc-df09a8b06f3f
+
+
 
 
 
