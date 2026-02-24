@@ -17,7 +17,7 @@ LND_STABLE_TIMEOUT=90
 LND_API_TIMEOUT=120
 
 # Minimum free disk space for full Bitcoin node (GB)
-REQUIRED_DISK_GB=800
+REQUIRED_DISK_GB=925
 
 # ============================================================
 # Colors (respects NO_COLOR convention: https://no-color.org/)
