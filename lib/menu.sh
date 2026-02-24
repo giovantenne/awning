@@ -9,13 +9,15 @@ show_menu() {
         clear 2>/dev/null || true
         draw_header "AWNING v$(get_awning_version)" "${status_label}"
         echo ""
-        local _scb_status _scb_health
-        _scb_status="$(dc_get_status scb 2>/dev/null)" || _scb_status=""
-        _scb_health="$(dc_get_health scb 2>/dev/null)" || _scb_health=""
-        if [[ -z "${SCB_REPO:-}" ]] || [[ "$_scb_status" != "running" ]] || [[ "$_scb_health" != "healthy" ]]; then
-            echo -e "  ${ORANGE}⚠ Channel backups (SCB) are not enabled."
-            echo -e "    Enable them via Tools > Setup Wizard${NC}"
-            echo ""
+        if [[ "$(count_running_services 2>/dev/null)" -gt 0 ]]; then
+            local _scb_status _scb_health
+            _scb_status="$(dc_get_status scb 2>/dev/null)" || _scb_status=""
+            _scb_health="$(dc_get_health scb 2>/dev/null)" || _scb_health=""
+            if [[ -z "${SCB_REPO:-}" ]] || [[ "$_scb_status" != "running" ]] || [[ "$_scb_health" != "healthy" ]]; then
+                echo -e "  ${ORANGE}⚠ Channel backups (SCB) are not enabled."
+                echo -e "    Enable them via Tools > Setup Wizard${NC}"
+                echo ""
+            fi
         fi
         echo -e "  ${BOLD}${WHITE}1)${NC} Status        ${DIM}Dashboard with sync progress${NC}"
         echo -e "  ${BOLD}${WHITE}2)${NC} Logs          ${DIM}View service logs${NC}"
