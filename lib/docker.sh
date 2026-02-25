@@ -119,6 +119,10 @@ fi
 # ============================================================
 
 dc_up() {
+    if ! check_container_conflicts; then
+        return 1
+    fi
+
     _dc up -d "$@"
 
     # If Tor is force-recreated without LND, LND can keep stale SOCKS connections.
@@ -139,6 +143,10 @@ dc_down_with_spinner() {
 }
 
 dc_restart() {
+    if ! check_container_conflicts; then
+        return 1
+    fi
+
     _dc up -d --force-recreate --no-build "$@"
 
     if _should_refresh_lnd_after_tor_change "restart" "$@"; then
@@ -258,6 +266,11 @@ dc_start_services() {
     local services=("$@")
     if [[ ${#services[@]} -eq 0 ]]; then
         read -ra services <<< "$(dc_active_services)"
+    fi
+
+    # Abort if containers from a different awning installation already exist.
+    if ! check_container_conflicts; then
+        return 1
     fi
 
     # Avoid redundant startup when everything is already running.
@@ -402,6 +415,44 @@ lncli() {
 # Interactive exec (for wallet creation, manual CLI)
 lncli_interactive() {
     dc_exec lnd lncli --lnddir=/data/.lnd --network "${BITCOIN_NETWORK}" "$@"
+}
+
+# Check if any awning containers already exist from a different installation directory.
+# Docker container names are global, so two awning installations cannot run simultaneously.
+# Returns 0 if no conflicts, 1 if containers from another directory are found.
+check_container_conflicts() {
+    local compose_dir
+    compose_dir="$(cd "$(dirname "$(awning_path docker-compose.yml)")" && pwd)"
+
+    local all_services
+    read -ra all_services <<< "$(dc_active_services)"
+
+    local foreign_dir=""
+    local service
+    for service in "${all_services[@]}"; do
+        # Check if a container with this name exists (any state)
+        local cdir
+        cdir="$(_docker inspect --format '{{index .Config.Labels "com.docker.compose.project.working_dir"}}' "$service" 2>/dev/null)" || continue
+        if [[ -n "$cdir" && "$cdir" != "$compose_dir" ]]; then
+            foreign_dir="$cdir"
+            break
+        fi
+    done
+
+    if [[ -n "$foreign_dir" ]]; then
+        echo ""
+        print_fail "Another awning installation is using the same container names."
+        echo ""
+        print_info "Existing containers belong to: ${BOLD}${foreign_dir}${NC}"
+        print_info "This installation is in:       ${BOLD}${compose_dir}${NC}"
+        echo ""
+        print_info "Stop the other instance first with: ./awning.sh stop"
+        print_info "from the directory above, or remove its containers with:"
+        print_info "  cd ${foreign_dir} && ./awning.sh stop"
+        echo ""
+        return 1
+    fi
+    return 0
 }
 
 # Get the state status of a container (running, exited, restarting, etc.)

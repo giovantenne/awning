@@ -241,8 +241,7 @@ ELECTRS_SSL_PORT=50002
 RTL_VERSION=${rtl_version}
 RTL_PASSWORD=${rtl_password}
 RTL_BIND=0.0.0.0
-RTL_PORT=3000
-
+RTL_PORT=3001
 # SCB (disabled)
 SCB_REPO=
 EOF
@@ -1557,10 +1556,12 @@ show_seed_screen() {
     draw_titled_info_box \
       "RTL web interface" \
       " " \
-      "URL: ${BOLD}http://${rtl_host}:${rtl_port}${NC}" \
+      "URL: ${BOLD}https://${rtl_host}:${rtl_port}${NC}" \
       "Password: ${ORANGE}${RTL_PASSWORD}${NC}" \
       " " \
       "${DIM}Password can be changed from the web interface.${NC}" \
+      "${DIM}Your browser will show a certificate warning (self-signed).${NC}" \
+      "${DIM}This is expected — click \"Advanced\" > \"Proceed\" to continue.${NC}" \
       " "
     echo ""
   else

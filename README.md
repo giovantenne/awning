@@ -115,7 +115,7 @@ Services bind to localhost by default (except RTL which is LAN-accessible).
 | --- | --- | --- | --- |
 | `8080` | LND REST | `127.0.0.1` | TLS REST API |
 | `50002` | Electrs (via stunnel) | `127.0.0.1` | Electrum SSL |
-| `3000` | RTL | `0.0.0.0` | Web interface (password protected) |
+| `3001` | RTL | `0.0.0.0` | Web interface (HTTPS, password protected) |
 
 Configurable in `.env` via `*_BIND` and `*_PORT` variables. Both LND and Electrs are also reachable through Tor hidden services.
 

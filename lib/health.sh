@@ -341,11 +341,13 @@ show_connections() {
     if [[ -n "${RTL_PASSWORD:-}" ]]; then
         local rtl_bind rtl_port
         rtl_bind="${RTL_BIND:-127.0.0.1}"
-        rtl_port="${RTL_PORT:-3000}"
+        rtl_port="${RTL_PORT:-3001}"
         if [[ "$rtl_bind" != "127.0.0.1" ]]; then
             local rtl_host="${rtl_bind}"
             [[ "$rtl_bind" == "0.0.0.0" ]] && rtl_host="$local_ip"
-            echo -e "    RTL Web UI:      ${WHITE}${UNDERLINE}http://${rtl_host}:${rtl_port}${NC}"
+            echo -e "    RTL Web UI:      ${WHITE}${UNDERLINE}https://${rtl_host}:${rtl_port}${NC}"
+            echo -e "                     ${ORANGE}Browser will warn about the self-signed cert${NC}"
+            echo -e "                     ${ORANGE}Click Advanced > Proceed on your browser${NC}"
             has_lan_service=true
         fi
     fi

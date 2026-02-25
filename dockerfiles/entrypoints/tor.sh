@@ -38,7 +38,7 @@ render_torrc_with_services() {
         "$TORRC_SRC" > "$TORRC_RENDERED"
 
     if [[ -n "$rtl" ]]; then
-        sed -i "s|rtl:3000|${rtl}:3000|g" "$TORRC_RENDERED"
+        sed -i "s|rtl:3001|${rtl}:3001|g" "$TORRC_RENDERED"
     else
         grep -v -E '(hidden_service_rtl|rtl:)' "$TORRC_RENDERED" > "${TORRC_RENDERED}.tmp"
         mv "${TORRC_RENDERED}.tmp" "$TORRC_RENDERED"

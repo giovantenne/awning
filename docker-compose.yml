@@ -191,7 +191,7 @@ services:
       lnd:
         condition: service_started
     ports:
-      - "${RTL_BIND:-0.0.0.0}:${RTL_PORT:-3000}:3000"
+      - "${RTL_BIND:-0.0.0.0}:${RTL_PORT:-3001}:3001"
     environment:
       RTL_CONFIG_PATH: /data/rtl
     volumes:

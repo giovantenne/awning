@@ -20,4 +20,4 @@ HiddenServicePort 50001 electrs:50001
 # RTL hidden service
 HiddenServiceDir /var/lib/tor/hidden_service_rtl/
 HiddenServiceVersion 3
-HiddenServicePort 3000 rtl:3000
+HiddenServicePort 3000 rtl:3001

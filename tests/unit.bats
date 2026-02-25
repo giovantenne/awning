@@ -594,6 +594,51 @@ teardown() {
 }
 
 # ============================================================
+# check_container_conflicts
+# ============================================================
+
+@test "check_container_conflicts: passes when no containers exist" {
+    _docker() { return 1; }
+    export SCB_REPO="" RTL_PASSWORD=""
+    run check_container_conflicts
+    [[ "$status" -eq 0 ]]
+}
+
+@test "check_container_conflicts: passes when containers belong to this directory" {
+    export _TEST_COMPOSE_DIR
+    _TEST_COMPOSE_DIR="$(cd "$AWNING_DIR" && pwd)"
+    _docker() {
+        echo "$_TEST_COMPOSE_DIR"
+        return 0
+    }
+    export SCB_REPO="" RTL_PASSWORD=""
+    run check_container_conflicts
+    [[ "$status" -eq 0 ]]
+}
+
+@test "check_container_conflicts: fails when containers belong to another directory" {
+    _docker() {
+        echo "/some/other/path"
+        return 0
+    }
+    export SCB_REPO="" RTL_PASSWORD=""
+    run check_container_conflicts
+    [[ "$status" -ne 0 ]]
+    [[ "$output" == *"Another awning installation"* ]]
+    [[ "$output" == *"/some/other/path"* ]]
+}
+
+@test "check_container_conflicts: ignores containers with empty label" {
+    _docker() {
+        echo ""
+        return 0
+    }
+    export SCB_REPO="" RTL_PASSWORD=""
+    run check_container_conflicts
+    [[ "$status" -eq 0 ]]
+}
+
+# ============================================================
 # generate_rpcauth (host openssl path)
 # ============================================================
 
