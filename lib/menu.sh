@@ -47,6 +47,17 @@ show_menu() {
         if [[ "$_sync_active" != "true" ]]; then
             return
         fi
+
+        # Pre-sync: headers not yet available
+        if [[ "${_sync_headers}" -eq 0 ]]; then
+            local _sp_frames=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
+            local _sp_f="${_sp_frames[_sync_spin++ % ${#_sp_frames[@]}]}"
+            printf '  [%b%s%b] %bBitcoin Core is starting...%b\033[K\n' \
+                "$CYAN" "$_sp_f" "$NC" "$DIM" "$NC"
+            printf '\033[K\n'
+            return
+        fi
+
         local fmt_blocks fmt_headers
         fmt_blocks="$(printf "%'d" "$_sync_blocks" 2>/dev/null)" || fmt_blocks="$_sync_blocks"
         fmt_headers="$(printf "%'d" "$_sync_headers" 2>/dev/null)" || fmt_headers="$_sync_headers"
@@ -55,6 +66,19 @@ show_menu() {
             "$fmt_blocks" "$fmt_headers" "$_sync_size_gb"
         progress_bar "$_sync_pct" 100 30
         printf '\033[K\n'
+    }
+
+    # Advance the pre-sync spinner character in-place (every ~1s).
+    _update_sync_spinner() {
+        [[ "$_sync_visible" != "true" ]] && return
+        [[ "${_sync_headers}" -ne 0 ]] && return
+        local _sp_frames=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
+        local _sp_f="${_sp_frames[_sync_spin++ % ${#_sp_frames[@]}]}"
+        # Row 5, col 3 = the spinner char inside "  [X]"
+        printf '\033[s'
+        tput cup 5 3 2>/dev/null || printf '\033[6;4H'
+        printf '%b%s%b' "$CYAN" "$_sp_f" "$NC"
+        printf '\033[u'
     }
 
     # Surgically update the sync panel rows without clearing.
@@ -136,7 +160,7 @@ show_menu() {
     }
 
     local status_label
-    local _sync_active=false _sync_visible=false
+    local _sync_active=false _sync_visible=false _sync_spin=0
     local _sync_blocks=0 _sync_headers=0 _sync_pct="0.00" _sync_size_gb="0.0"
     refresh_main_menu
 
@@ -148,12 +172,13 @@ show_menu() {
 
         local ticks=0
         while true; do
-            if read -r -t 1 choice; then
+            if read -r -t 0.15 choice; then
                 break
             fi
 
             ticks=$((ticks + 1))
-            if (( ticks < 5 )); then
+            _update_sync_spinner
+            if (( ticks < 33 )); then
                 continue
             fi
             ticks=0
