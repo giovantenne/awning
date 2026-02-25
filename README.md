@@ -97,6 +97,11 @@ By default, Electrs binds to `127.0.0.1` (local only). To expose it on your LAN,
 ```
 In Zeus: *Add Node > lndconnect REST*.
 
+**RTL (Web UI):**
+- RTL is exposed on port `3001` over HTTPS.
+- Open `https://<HOST_IP>:3001`.
+- Because RTL uses a self-signed certificate, your browser will show a warning: click **Advanced > Proceed**.
+
 ## 💾 SCB (Static Channel Backup)
 
 SCB automatically backs up your Lightning channel state to a private GitHub repository. Disabled by default.
@@ -118,6 +123,7 @@ Services bind to localhost by default (except RTL which is LAN-accessible).
 | `3001` | RTL | `0.0.0.0` | Web interface (HTTPS, password protected) |
 
 Configurable in `.env` via `*_BIND` and `*_PORT` variables. Both LND and Electrs are also reachable through Tor hidden services.
+For RTL on `3001`, browsers will warn about the self-signed certificate on first access: use **Advanced > Proceed**.
 
 ## ⚙️ Configuration
 
