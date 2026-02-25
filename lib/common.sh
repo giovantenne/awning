@@ -353,6 +353,10 @@ spinner() {
     local cols
     cols=$(tput cols 2>/dev/null || echo 80)
 
+    # Hide cursor to avoid flicker when updating detail line
+    tput civis 2>/dev/null || true
+    trap 'tput cnorm 2>/dev/null || true' RETURN
+
     while kill -0 "$pid" 2>/dev/null; do
         printf "\r  [${CYAN}%s${NC}] %s\033[K" "${frames[i++ % ${#frames[@]}]}" "$message"
         # Show last log line on a second row if log_file is provided

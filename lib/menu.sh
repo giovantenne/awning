@@ -4,11 +4,85 @@
 # All submenus have clear screen, back option, and robust input handling
 
 show_menu() {
+    # ── Sync data helpers ──────────────────────────────────────
+    # Populate _sync_* variables from bitcoin RPC.  Returns 1 if
+    # bitcoin is not running or sync is complete (panel hidden).
+    _fetch_sync_data() {
+        _sync_active=false
+        _sync_blocks=0
+        _sync_headers=0
+        _sync_pct="0.00"
+        _sync_size_gb="0.0"
+
+        dc_is_running bitcoin 2>/dev/null || return 1
+
+        local info
+        info="$(bitcoin_cli getblockchaininfo 2>/dev/null)" || return 1
+
+        local progress ibd
+        _sync_blocks="$(echo "$info" | jq -r '.blocks // 0')"
+        _sync_headers="$(echo "$info" | jq -r '.headers // 0')"
+        progress="$(echo "$info" | jq -r '.verificationprogress // 0')"
+        ibd="$(echo "$info" | jq -r '.initialblockdownload // false')"
+
+        _sync_pct="$(echo "$progress" | awk '{printf "%.2f", $1 * 100}')"
+
+        # Size on disk in GB (bytes → GB, 2 decimals)
+        local size_bytes
+        size_bytes="$(echo "$info" | jq -r '.size_on_disk // 0')"
+        _sync_size_gb="$(echo "$size_bytes" | awk '{printf "%.1f", $1 / 1073741824}')"
+
+        if [[ "$ibd" == "true" ]] \
+            || [[ "${_sync_blocks}" -lt "${_sync_headers}" ]] \
+            || awk "BEGIN {exit (${_sync_pct} >= 99.99)}" 2>/dev/null; then
+            _sync_active=true
+            return 0
+        fi
+        return 1
+    }
+
+    # Print the 3-line sync panel (blank + summary + bar).
+    # Each line uses \033[K to erase trailing chars on redraws.
+    _render_sync_panel() {
+        if [[ "$_sync_active" != "true" ]]; then
+            return
+        fi
+        local fmt_blocks fmt_headers
+        fmt_blocks="$(printf "%'d" "$_sync_blocks" 2>/dev/null)" || fmt_blocks="$_sync_blocks"
+        fmt_headers="$(printf "%'d" "$_sync_headers" 2>/dev/null)" || fmt_headers="$_sync_headers"
+
+        printf '  %s / %s blocks  \xe2\x94\x82  %s GB\033[K\n' \
+            "$fmt_blocks" "$fmt_headers" "$_sync_size_gb"
+        progress_bar "$_sync_pct" 100 30
+        printf '\033[K\n'
+    }
+
+    # Surgically update the sync panel rows without clearing.
+    _update_sync_panel() {
+        # If visibility toggled, caller does full redraw instead.
+        if [[ "$_sync_active" != "$_sync_visible" ]]; then
+            return 1  # signal: need full redraw
+        fi
+        [[ "$_sync_active" != "true" ]] && return 0
+
+        # Rows: 0=blank 1=top 2=title 3=subtitle 4=bottom 5=summary 6=bar 7=blank
+        printf '\033[s'
+        tput cup 5 0 2>/dev/null || printf '\033[6;1H'
+        _render_sync_panel
+        printf '\033[u'
+    }
+
     render_main_menu() {
         local status_label="$1"
         clear 2>/dev/null || true
         draw_header "AWNING v$(get_awning_version)" "${status_label}"
-        echo ""
+        _fetch_sync_data || true
+        if [[ "$_sync_active" == "true" ]]; then
+            _render_sync_panel
+        else
+            echo ""
+        fi
+        _sync_visible="$_sync_active"
         if [[ "$(count_running_services 2>/dev/null)" -gt 0 ]]; then
             local _scb_status _scb_health
             _scb_status="$(dc_get_status scb 2>/dev/null)" || _scb_status=""
@@ -62,6 +136,8 @@ show_menu() {
     }
 
     local status_label
+    local _sync_active=false _sync_visible=false
+    local _sync_blocks=0 _sync_headers=0 _sync_pct="0.00" _sync_size_gb="0.0"
     refresh_main_menu
 
     while true; do
@@ -77,16 +153,27 @@ show_menu() {
             fi
 
             ticks=$((ticks + 1))
-            if (( ticks < 3 )); then
+            if (( ticks < 5 )); then
                 continue
             fi
             ticks=0
 
+            # Refresh subtitle and sync panel together
             local next_status_label
             next_status_label="$(get_status_label 2>/dev/null)" || next_status_label="${DIM}unknown${NC}"
-            if [[ "$next_status_label" != "$status_label" ]]; then
+            _fetch_sync_data || true
+
+            if [[ "$_sync_active" != "$_sync_visible" ]]; then
+                # Visibility changed — full redraw
                 status_label="$next_status_label"
-                _update_subtitle "$status_label"
+                render_main_menu "$status_label"
+                printf "  %b" "$prompt"
+            else
+                if [[ "$next_status_label" != "$status_label" ]]; then
+                    status_label="$next_status_label"
+                    _update_subtitle "$status_label"
+                fi
+                _update_sync_panel || true
             fi
         done
 
