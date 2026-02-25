@@ -252,7 +252,7 @@ EOF
   export BITCOIN_ARCH="$bitcoin_arch" LND_ARCH="$lnd_arch"
   export BITCOIN_CORE_VERSION="$btc_version" LND_VERSION="$lnd_version" ELECTRS_VERSION="$electrs_version"
   export NODE_ALIAS="$node_alias"
-  export RTL_VERSION="$rtl_version" RTL_PASSWORD="$rtl_password" RTL_BIND="0.0.0.0" RTL_PORT="3000"
+  export RTL_VERSION="$rtl_version" RTL_PASSWORD="$rtl_password" RTL_BIND="0.0.0.0" RTL_PORT="3001"
   export SCB_REPO=""
 
   # --- Generate configs from templates (reuse existing) ---
