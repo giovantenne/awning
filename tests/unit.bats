@@ -673,3 +673,73 @@ teardown() {
     result="$(generate_rpcauth "user" 'p@ss|w&rd\$!')"
     [[ "$result" == rpcauth=user:* ]]
 }
+
+# ============================================================
+# _wallet_already_exists
+# ============================================================
+
+@test "_wallet_already_exists: returns false when nothing exists" {
+    AWNING_DIR="$TEST_TMPDIR"
+    run _wallet_already_exists
+    [[ "$status" -ne 0 ]]
+}
+
+@test "_wallet_already_exists: detects wallet.db (layer 1)" {
+    AWNING_DIR="$TEST_TMPDIR"
+    mkdir -p "${TEST_TMPDIR}/data/lnd/data/chain/bitcoin/mainnet"
+    touch "${TEST_TMPDIR}/data/lnd/data/chain/bitcoin/mainnet/wallet.db"
+    _wallet_already_exists
+}
+
+@test "_wallet_already_exists: detects admin.macaroon without wallet.db (layer 2)" {
+    AWNING_DIR="$TEST_TMPDIR"
+    mkdir -p "${TEST_TMPDIR}/data/lnd/data/chain/bitcoin/mainnet"
+    touch "${TEST_TMPDIR}/data/lnd/data/chain/bitcoin/mainnet/admin.macaroon"
+    _wallet_already_exists
+}
+
+@test "_wallet_already_exists: detects non-empty password.txt without other files (layer 3)" {
+    AWNING_DIR="$TEST_TMPDIR"
+    mkdir -p "${TEST_TMPDIR}/data/lnd"
+    printf 'somerealpassword\n' > "${TEST_TMPDIR}/data/lnd/password.txt"
+    _wallet_already_exists
+}
+
+@test "_wallet_already_exists: ignores empty password.txt (placeholder)" {
+    AWNING_DIR="$TEST_TMPDIR"
+    mkdir -p "${TEST_TMPDIR}/data/lnd"
+    touch "${TEST_TMPDIR}/data/lnd/password.txt"
+    run _wallet_already_exists
+    [[ "$status" -ne 0 ]]
+}
+
+@test "_wallet_already_exists: wallet.db alone is sufficient (no macaroon, no password)" {
+    AWNING_DIR="$TEST_TMPDIR"
+    mkdir -p "${TEST_TMPDIR}/data/lnd/data/chain/bitcoin/mainnet"
+    touch "${TEST_TMPDIR}/data/lnd/data/chain/bitcoin/mainnet/wallet.db"
+    # No macaroon, no password.txt
+    _wallet_already_exists
+}
+
+@test "_wallet_already_exists: all three layers present" {
+    AWNING_DIR="$TEST_TMPDIR"
+    mkdir -p "${TEST_TMPDIR}/data/lnd/data/chain/bitcoin/mainnet"
+    touch "${TEST_TMPDIR}/data/lnd/data/chain/bitcoin/mainnet/wallet.db"
+    touch "${TEST_TMPDIR}/data/lnd/data/chain/bitcoin/mainnet/admin.macaroon"
+    printf 'password123\n' > "${TEST_TMPDIR}/data/lnd/password.txt"
+    _wallet_already_exists
+}
+
+@test "_wallet_already_exists: directory exists but is empty" {
+    AWNING_DIR="$TEST_TMPDIR"
+    mkdir -p "${TEST_TMPDIR}/data/lnd/data/chain/bitcoin/mainnet"
+    run _wallet_already_exists
+    [[ "$status" -ne 0 ]]
+}
+
+@test "_wallet_already_exists: data/lnd directory does not exist at all" {
+    AWNING_DIR="$TEST_TMPDIR"
+    # Don't create any directories
+    run _wallet_already_exists
+    [[ "$status" -ne 0 ]]
+}

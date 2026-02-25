@@ -569,31 +569,6 @@ has_admin_macaroon() {
     [[ -f "$path" ]]
 }
 
-sync_auto_unlock_password() {
-    local p1 p2
-    local password_file
-    password_file="$(awning_path data/lnd/password.txt)"
-
-    print_info "To enable auto-unlock, re-enter the wallet password you just used."
-    while true; do
-        p1="$(read_password "Wallet password")"
-        if ! validate_password "$p1" "$MIN_PASSWORD_LENGTH"; then
-            continue
-        fi
-        p2="$(read_password "Confirm wallet password")"
-        if [[ "$p1" != "$p2" ]]; then
-            print_fail "Passwords do not match"
-            continue
-        fi
-        break
-    done
-
-    umask 077
-    printf '%s\n' "$p1" > "$password_file"
-    chmod 600 "$password_file"
-    print_check "Auto-unlock password saved"
-}
-
 show_auto_unlock_password_ui() {
     local password_file
     password_file="$(awning_path data/lnd/password.txt)"
