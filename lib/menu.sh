@@ -13,6 +13,7 @@ show_menu() {
         _sync_headers=0
         _sync_pct="0.00"
         _sync_size_gb="0.0"
+        # Keep last known pre-sync percentage across refreshes while headers are 0.
 
         dc_is_running bitcoin 2>/dev/null || return 1
 
@@ -32,6 +33,12 @@ show_menu() {
         size_bytes="$(echo "$info" | jq -r '.size_on_disk // 0')"
         _sync_size_gb="$(echo "$size_bytes" | awk '{printf "%.1f", $1 / 1073741824}')"
 
+        if [[ "${_sync_headers}" -eq 0 ]]; then
+            _fetch_presync_pct_from_logs || true
+        else
+            _sync_presync_pct=""
+        fi
+
         if [[ "$ibd" == "true" ]] \
             || [[ "${_sync_blocks}" -lt "${_sync_headers}" ]] \
             || awk "BEGIN {exit (${_sync_pct} >= 99.99)}" 2>/dev/null; then
@@ -39,6 +46,25 @@ show_menu() {
             return 0
         fi
         return 1
+    }
+
+    # Parse the latest "Pre-synchronizing blockheaders" percentage from logs.
+    _fetch_presync_pct_from_logs() {
+        local logs pct
+        logs="$(dc_logs --tail 400 --no-color bitcoin 2>/dev/null)" || return 1
+        pct="$(echo "$logs" | awk '
+            /Pre-synchronizing blockheaders/ {
+                if (match($0, /~?[0-9]+([.][0-9]+)?%/)) {
+                    v = substr($0, RSTART, RLENGTH)
+                }
+            }
+            END {
+                if (v != "") print v
+            }
+        ')"
+        [[ -n "$pct" ]] || return 1
+        pct="${pct#\~}"
+        _sync_presync_pct="$pct"
     }
 
     # Print the 3-line sync panel (blank + summary + bar).
@@ -52,8 +78,12 @@ show_menu() {
         if [[ "${_sync_headers}" -eq 0 ]]; then
             local _sp_frames=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
             local _sp_f="${_sp_frames[_sync_spin++ % ${#_sp_frames[@]}]}"
-            printf '  [%b%s%b] %bBitcoin Core is starting...%b\033[K\n' \
-                "$CYAN" "$_sp_f" "$NC" "$DIM" "$NC"
+            local _start_msg="Bitcoin Core is starting..."
+            if [[ -n "$_sync_presync_pct" ]]; then
+                _start_msg="${_start_msg} (${_sync_presync_pct})"
+            fi
+            printf '  [%b%s%b] %b%s%b\033[K\n' \
+                "$CYAN" "$_sp_f" "$NC" "$DIM" "$_start_msg" "$NC"
             printf '\033[K\n'
             return
         fi
@@ -162,6 +192,7 @@ show_menu() {
     local status_label
     local _sync_active=false _sync_visible=false _sync_spin=0
     local _sync_blocks=0 _sync_headers=0 _sync_pct="0.00" _sync_size_gb="0.0"
+    local _sync_presync_pct=""
     refresh_main_menu
 
     while true; do
