@@ -130,15 +130,12 @@ validate_env() {
 
 validate_env
 
-# Block setup flows when services are already running.
-# Running setup while containers are active can cause confusing cross-instance
-# behavior and partial config/application state.
+# Block setup flows only when another installation directory already owns
+# the same container names. In-directory setup must remain allowed.
 ensure_setup_can_run() {
-    local running_count
-    running_count="$(count_running_services 2>/dev/null || echo 0)"
-    if [[ "$running_count" -gt 0 ]]; then
-        print_fail "Setup cannot run while Awning services are running."
-        print_info "Stop services first with: ${CYAN}./awning.sh stop${NC}"
+    # Keep conflict messaging consistent with other operational commands:
+    # when running from another directory, show both installation paths.
+    if ! check_container_conflicts; then
         return 1
     fi
     return 0
