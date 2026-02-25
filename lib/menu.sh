@@ -26,7 +26,7 @@ show_menu() {
         progress="$(echo "$info" | jq -r '.verificationprogress // 0')"
         ibd="$(echo "$info" | jq -r '.initialblockdownload // false')"
 
-        _sync_pct="$(echo "$progress" | awk '{printf "%.2f", $1 * 100}')"
+        _sync_pct="$(echo "$progress" | LC_ALL=C awk '{printf "%.2f", $1 * 100}')"
 
         # Size on disk in GB (bytes → GB, 2 decimals)
         local size_bytes
@@ -41,7 +41,7 @@ show_menu() {
 
         if [[ "$ibd" == "true" ]] \
             || [[ "${_sync_blocks}" -lt "${_sync_headers}" ]] \
-            || awk "BEGIN {exit (${_sync_pct} >= 99.99)}" 2>/dev/null; then
+            || LC_ALL=C awk "BEGIN {exit (${_sync_pct} >= 99.99)}" 2>/dev/null; then
             _sync_active=true
             return 0
         fi

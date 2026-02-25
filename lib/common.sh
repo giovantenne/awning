@@ -301,21 +301,23 @@ progress_bar() {
     local max="$2"
     local bar_width="${3:-30}"
     local label="${4:-}"
+    local value_num="${value//,/.}"
+    local max_num="${max//,/.}"
 
     local pct filled empty
 
     # Guard against division by zero
-    if [[ "$max" == "0" ]]; then
-        max=1
-        value=0
+    if [[ "$max_num" == "0" ]]; then
+        max_num=1
+        value_num=0
     fi
 
-    if [[ "$max" == "1" ]]; then
-        pct="$(echo "$value" | awk '{printf "%.1f", $1 * 100}')"
-        filled="$(echo "$value $bar_width" | awk '{printf "%d", $1 * $2}')"
+    if [[ "$max_num" == "1" ]]; then
+        pct="$(LC_ALL=C awk -v v="$value_num" 'BEGIN {printf "%.1f", v * 100}')"
+        filled="$(LC_ALL=C awk -v v="$value_num" -v w="$bar_width" 'BEGIN {printf "%d", v * w}')"
     else
-        pct="$(echo "$value $max" | awk '{printf "%.1f", ($1 / $2) * 100}')"
-        filled="$(echo "$value $max $bar_width" | awk '{printf "%d", ($1 / $2) * $3}')"
+        pct="$(LC_ALL=C awk -v v="$value_num" -v m="$max_num" 'BEGIN {printf "%.1f", (v / m) * 100}')"
+        filled="$(LC_ALL=C awk -v v="$value_num" -v m="$max_num" -v w="$bar_width" 'BEGIN {printf "%d", (v / m) * w}')"
     fi
 
     [[ $filled -gt $bar_width ]] && filled=$bar_width

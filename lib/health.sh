@@ -25,8 +25,8 @@ show_status() {
         bblocks="$(echo "$_cached_binfo" | jq -r '.blocks // 0')"
         bheaders="$(echo "$_cached_binfo" | jq -r '.headers // 0')"
         bibd="$(echo "$_cached_binfo" | jq -r '.initialblockdownload // false')"
-        bpct="$(echo "${bprogress:-0}" | awk '{printf "%.2f", $1 * 100}')"
-        if [[ "$bibd" == "true" ]] || [[ "${bblocks:-0}" -lt "${bheaders:-0}" ]] || awk "BEGIN {exit (${bpct:-0} >= 99.99)}" 2>/dev/null; then
+        bpct="$(echo "${bprogress:-0}" | LC_ALL=C awk '{printf "%.2f", $1 * 100}')"
+        if [[ "$bibd" == "true" ]] || [[ "${bblocks:-0}" -lt "${bheaders:-0}" ]] || LC_ALL=C awk "BEGIN {exit (${bpct:-0} >= 99.99)}" 2>/dev/null; then
             bitcoin_sync_detail="sync (${bpct}%)"
         fi
     fi
@@ -126,7 +126,7 @@ show_bitcoin_status() {
 
     # Convert progress to percentage
     local pct
-    pct="$(echo "$progress" | awk '{printf "%.2f", $1 * 100}')"
+    pct="$(echo "$progress" | LC_ALL=C awk '{printf "%.2f", $1 * 100}')"
 
     # Convert size to GB
     local size_gb

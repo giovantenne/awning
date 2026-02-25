@@ -315,8 +315,8 @@ dc_start_services() {
                     progress="$(bitcoin_cli getblockchaininfo 2>/dev/null | jq -r '.verificationprogress // empty' 2>/dev/null)" || true
                     if [[ -n "$progress" ]]; then
                         local pct
-                        pct="$(echo "$progress" | awk '{printf "%.2f", $1 * 100}')"
-                        if awk "BEGIN {exit ($pct >= 99.9)}" 2>/dev/null; then
+                        pct="$(echo "$progress" | LC_ALL=C awk '{printf "%.2f", $1 * 100}')"
+                        if LC_ALL=C awk "BEGIN {exit ($pct >= 99.9)}" 2>/dev/null; then
                             annotation="${DIM}(syncing: ${pct}%)${NC}"
                         fi
                     fi
