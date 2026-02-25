@@ -130,6 +130,20 @@ validate_env() {
 
 validate_env
 
+# Block setup flows when services are already running.
+# Running setup while containers are active can cause confusing cross-instance
+# behavior and partial config/application state.
+ensure_setup_can_run() {
+    local running_count
+    running_count="$(count_running_services 2>/dev/null || echo 0)"
+    if [[ "$running_count" -gt 0 ]]; then
+        print_fail "Setup cannot run while Awning services are running."
+        print_info "Stop services first with: ${CYAN}./awning.sh stop${NC}"
+        return 1
+    fi
+    return 0
+}
+
 # --- Main ---
 main() {
     local command="${1:-}"
@@ -139,6 +153,7 @@ main() {
 
     # If no .env exists and no command given, run auto-setup
     if [[ -z "$command" && ! -f "$env_file" ]]; then
+        ensure_setup_can_run || return 1
         if run_auto_setup "$setup_ignore_disk_space"; then
             if check_container_conflicts; then
                 show_menu
@@ -150,6 +165,7 @@ main() {
     fi
     # Also handle: ./awning.sh --ignore-disk-space (no .env, triggers auto-setup)
     if [[ ! -f "$env_file" ]] && [[ "$command" == "--ignore-disk-space" || "$command" == "--force" ]]; then
+        ensure_setup_can_run || return 1
         if run_auto_setup 1; then
             if check_container_conflicts; then
                 show_menu
@@ -193,6 +209,7 @@ main() {
 
         # Setup
         setup)
+            ensure_setup_can_run || return 1
             case "${2:-}" in
                 "" )
                     ;;
