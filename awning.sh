@@ -140,14 +140,22 @@ main() {
     # If no .env exists and no command given, run auto-setup
     if [[ -z "$command" && ! -f "$env_file" ]]; then
         if run_auto_setup "$setup_ignore_disk_space"; then
-            show_menu
+            if check_container_conflicts; then
+                show_menu
+            else
+                return 1
+            fi
         fi
         return
     fi
     # Also handle: ./awning.sh --ignore-disk-space (no .env, triggers auto-setup)
     if [[ ! -f "$env_file" ]] && [[ "$command" == "--ignore-disk-space" || "$command" == "--force" ]]; then
         if run_auto_setup 1; then
-            show_menu
+            if check_container_conflicts; then
+                show_menu
+            else
+                return 1
+            fi
         fi
         return
     fi
@@ -164,6 +172,18 @@ main() {
                 ;;
         esac
     fi
+
+    # Prevent running operational commands from a different installation
+    # directory when another awning instance already owns these container names.
+    case "$command" in
+        setup|help|-h|--help|version)
+            ;;
+        *)
+            if ! check_container_conflicts; then
+                return 1
+            fi
+            ;;
+    esac
 
     case "$command" in
         # No argument: show interactive menu
@@ -186,7 +206,11 @@ main() {
                     ;;
             esac
             if run_setup "$setup_ignore_disk_space"; then
-                show_menu
+                if check_container_conflicts; then
+                    show_menu
+                else
+                    return 1
+                fi
             fi
             ;;
 
