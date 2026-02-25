@@ -247,6 +247,26 @@ teardown() {
 }
 
 # ============================================================
+# wait_for_lnd_stable
+# ============================================================
+
+@test "wait_for_lnd_stable: succeeds when lnd status is running" {
+    dc_get_status() { echo "running"; }
+    sleep() { :; }
+    export LND_STABLE_TIMEOUT=2
+    run wait_for_lnd_stable
+    [[ "$status" -eq 0 ]]
+}
+
+@test "wait_for_lnd_stable: times out when lnd never reaches running" {
+    dc_get_status() { echo "restarting"; }
+    sleep() { :; }
+    export LND_STABLE_TIMEOUT=2
+    run wait_for_lnd_stable
+    [[ "$status" -ne 0 ]]
+}
+
+# ============================================================
 # validate_env
 # ============================================================
 

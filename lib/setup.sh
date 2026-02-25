@@ -1280,11 +1280,11 @@ wait_for_lnd_stable() {
   local status=""
 
   while ((elapsed < timeout_s)); do
-    status="$(_dc ps --format '{{.Status}}' lnd 2>/dev/null)" || status=""
-    if [[ -n "$status" ]] && echo "$status" | grep -qi "up"; then
-      if ! echo "$status" | grep -qi "restarting"; then
-        return 0
-      fi
+    # Use container state from docker inspect instead of parsing compose
+    # human-readable status text, which varies across Compose versions.
+    status="$(dc_get_status lnd 2>/dev/null)" || status=""
+    if [[ "$status" == "running" ]]; then
+      return 0
     fi
     sleep 2
     elapsed=$((elapsed + 2))
