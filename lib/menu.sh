@@ -85,6 +85,7 @@ show_menu() {
             printf '  [%b%s%b] %b%s%b\033[K\n' \
                 "$CYAN" "$_sp_f" "$NC" "$DIM" "$_start_msg" "$NC"
             printf '\033[K\n'
+            printf '\033[K\n'
             return
         fi
 
