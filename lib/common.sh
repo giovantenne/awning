@@ -11,6 +11,7 @@ ELECTRS_TCP_PORT=50001
 RTL_PORT=3001
 BITCOIN_NETWORK="mainnet"
 ADMIN_MACAROON_SUBPATH="data/chain/bitcoin/mainnet/admin.macaroon"
+WALLET_DB_SUBPATH="data/chain/bitcoin/mainnet/wallet.db"
 
 # Timeouts (seconds)
 LND_STABLE_TIMEOUT=90

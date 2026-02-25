@@ -1203,62 +1203,22 @@ step_initialize_wallet() {
   print_step "Step 7/7: Initialize LND Wallet"
   echo ""
 
-  local macaroon
-  macaroon="$(awning_path "data/lnd/${ADMIN_MACAROON_SUBPATH}")"
-  if [[ -f "$macaroon" ]]; then
-    print_info "Wallet already initialized, skipping."
-    return 0
-  fi
+  # Clear any seed from a previous run in the same shell session.
+  _AUTO_SEED_WORDS=()
 
-  if ! dc_is_running lnd; then
-    print_warn "LND is not running. Attempting to start required services..."
-    dc_start_services lnd >/dev/null 2>&1 || true
-    sleep 2
-    if ! dc_is_running lnd; then
-      print_warn "LND is still not running, wallet initialization skipped."
-      print_info "Check logs with: ${CYAN}./awning.sh logs lnd${NC}"
-      return 0
-    fi
-    print_check "LND started"
-  fi
-
-  local lnd_password
-  local password_file
-  password_file="$(awning_path data/lnd/password.txt)"
-  mkdir -p "$(awning_path data/lnd)"
-
-  echo ""
-  print_info "Enter the LND auto-unlock password (saved in password.txt)."
-  print_info "Use the same password you will enter in wallet creation."
-  while true; do
-    lnd_password="$(read_password "LND auto-unlock password")"
-    if validate_password "$lnd_password" "$MIN_PASSWORD_LENGTH"; then
-      break
-    fi
-  done
-  umask 077
-  printf '%s\n' "$lnd_password" >"$password_file"
-  chmod 600 "$password_file"
-  print_check "Auto-unlock password saved"
-
-  print_info "LND will ask for wallet password twice."
-  print_info "Use the same password you just saved for auto-unlock."
-  print_warn "IMPORTANT: Write down the seed phrase displayed below!"
-  echo ""
-
-  if ! wait_for_lnd_stable; then
-    print_fail "LND is not stable yet (still restarting)."
-    print_info "Try again in a minute with: ${CYAN}./awning.sh setup${NC}"
+  if ! auto_initialize_wallet; then
+    print_warn "Wallet initialization failed. You can retry from the menu."
     return 1
   fi
 
-  if dc_exec lnd lncli create; then
-    print_check "Wallet initialized"
-    return 0
+  # Show seed only when a new wallet was just created.
+  # auto_initialize_wallet populates _AUTO_SEED_WORDS only on fresh creation;
+  # when the wallet already exists it returns 0 without touching the array.
+  if [[ ${#_AUTO_SEED_WORDS[@]} -eq 24 ]]; then
+    show_seed_screen
   fi
 
-  print_fail "Wallet initialization failed"
-  return 1
+  return 0
 }
 
 ensure_lnd_password_file() {
@@ -1365,24 +1325,59 @@ _wait_for_lnd_api_with_spinner() {
   return "$api_status"
 }
 
+# Check whether an LND wallet already exists.
+# Uses multiple layers of defense to avoid false negatives:
+#   1. wallet.db on disk  — definitive, no false negatives possible
+#   2. macaroon on disk   — strong signal, created alongside wallet.db
+#   3. LND API state      — fallback when files were removed but wallet.db
+#                           lives inside a Docker volume not mapped to host
+# Returns: 0 = wallet exists, 1 = no wallet found
+_wallet_already_exists() {
+  # Layer 1: wallet.db is the definitive proof a wallet was created.
+  # It lives on the host-mounted volume and survives container recreation.
+  local wallet_db
+  wallet_db="$(awning_path "data/lnd/${WALLET_DB_SUBPATH}")"
+  if [[ -f "$wallet_db" ]]; then
+    return 0
+  fi
+
+  # Layer 2: macaroon file — created by LND after wallet init.
+  local macaroon
+  macaroon="$(awning_path "data/lnd/${ADMIN_MACAROON_SUBPATH}")"
+  if [[ -f "$macaroon" ]]; then
+    return 0
+  fi
+
+  # Layer 3: non-empty password.txt — means a previous init wrote a real
+  # password. The file is empty only when created by ensure_lnd_password_file
+  # as a placeholder before any wallet exists.
+  local password_file
+  password_file="$(awning_path data/lnd/password.txt)"
+  if [[ -s "$password_file" ]]; then
+    return 0
+  fi
+
+  return 1
+}
+
 # Initialize LND wallet via REST API (non-interactive).
 # Two-step process: 1) /v1/genseed to generate seed, 2) /v1/initwallet with seed + password.
 # Writes password.txt, captures seed in _AUTO_SEED_WORDS.
+# SAFETY: refuses to proceed if a wallet already exists to prevent fund loss.
 # Returns: 0 = success, 1 = failure
 auto_initialize_wallet() {
+  # ── Guard: abort if wallet already exists ──────────────────
+  # This check MUST happen before any password generation or file writes.
+  if _wallet_already_exists; then
+    print_info "Wallet already initialized, skipping."
+    return 0
+  fi
+
   local lnd_password
   lnd_password="$(generate_password 16)"
   local password_file
   password_file="$(awning_path data/lnd/password.txt)"
   mkdir -p "$(awning_path data/lnd)"
-
-  # Skip if wallet already exists (macaroon present)
-  local macaroon
-  macaroon="$(awning_path "data/lnd/${ADMIN_MACAROON_SUBPATH}")"
-  if [[ -f "$macaroon" ]]; then
-    print_info "Wallet already initialized, skipping."
-    return 0
-  fi
 
   # Write the auto-unlock password
   umask 077
@@ -1400,6 +1395,9 @@ auto_initialize_wallet() {
   local api_status=0
   _wait_for_lnd_api_with_spinner || api_status=$?
 
+  # ── Second guard: API says wallet exists ──────────────────
+  # Catches the edge case where wallet.db appeared between the initial
+  # check and now (e.g. LND auto-unlocked an existing wallet).
   if [[ $api_status -eq 2 ]]; then
     print_info "Wallet already exists, skipping creation."
     return 0
