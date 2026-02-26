@@ -22,6 +22,9 @@ fi
 source "${AWNING_DIR}/lib/common.sh"
 source "${AWNING_DIR}/lib/docker.sh"
 source "${AWNING_DIR}/lib/setup.sh"
+source "${AWNING_DIR}/lib/app/commands.sh"
+source "${AWNING_DIR}/lib/domain/setup_flow.sh"
+source "${AWNING_DIR}/lib/domain/status.sh"
 source "${AWNING_DIR}/lib/health.sh"
 source "${AWNING_DIR}/lib/menu.sh"
 
@@ -198,106 +201,7 @@ main() {
             ;;
     esac
 
-    case "$command" in
-        # No argument: show interactive menu
-        "")
-            show_menu
-            ;;
-
-        # Setup
-        setup)
-            ensure_setup_can_run || return 1
-            case "${2:-}" in
-                "" )
-                    ;;
-                --ignore-disk-space|--force)
-                    setup_ignore_disk_space=1
-                    ;;
-                * )
-                    print_fail "Unknown setup option: ${2}"
-                    print_info "Use: ${CYAN}./awning.sh setup --ignore-disk-space${NC}"
-                    return 1
-                    ;;
-            esac
-            if run_setup "$setup_ignore_disk_space"; then
-                if check_container_conflicts; then
-                    show_menu
-                else
-                    return 1
-                fi
-            fi
-            ;;
-
-        # Service management
-        start)
-            dc_start_services
-            ;;
-        stop)
-            dc_stop_services
-            print_check "Services stopped"
-            ;;
-        restart)
-            dc_restart "${@:2}"
-            print_check "Services restarted"
-            ;;
-        build)
-            dc_build_services "${@:2}"
-            ;;
-        rebuild)
-            dc_down_with_spinner
-            dc_build_services
-            dc_start_services
-            print_check "Rebuild complete"
-            ;;
-
-        # Monitoring
-        status)
-            show_status
-            ;;
-        version)
-            echo "$(get_awning_version)"
-            ;;
-        logs)
-            dc_logs -f --tail 50 "${@:2}"
-            ;;
-        connections)
-            show_connections
-            ;;
-
-        # Wallet
-        wallet-balance)
-            require_wallet && show_wallet_balance_ui
-            ;;
-        channel-balance)
-            require_wallet && show_channel_balance_ui
-            ;;
-        new-address)
-            require_wallet && show_new_address_ui
-            ;;
-        zeus-connect)
-            zeus_connect
-            ;;
-
-        # CLI access
-        bitcoin-cli)
-            bitcoin_cli "${@:2}"
-            ;;
-        lncli)
-            lncli "${@:2}"
-            ;;
-
-        # Help
-        help|-h|--help)
-            show_help
-            ;;
-
-        *)
-            print_fail "Unknown command: $command"
-            echo ""
-            show_help
-            exit 1
-            ;;
-    esac
+    awning_dispatch_command "$command" "$setup_ignore_disk_space" "${@:2}"
 }
 
 show_help() {

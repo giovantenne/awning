@@ -20,13 +20,12 @@ show_status() {
     local services
     local bitcoin_sync_detail=""
     if [[ -n "$_cached_binfo" ]]; then
-        local bprogress bblocks bheaders bibd bpct
-        bprogress="$(echo "$_cached_binfo" | jq -r '.verificationprogress // empty')"
-        bblocks="$(echo "$_cached_binfo" | jq -r '.blocks // 0')"
-        bheaders="$(echo "$_cached_binfo" | jq -r '.headers // 0')"
-        bibd="$(echo "$_cached_binfo" | jq -r '.initialblockdownload // false')"
-        bpct="$(echo "${bprogress:-0}" | LC_ALL=C awk '{printf "%.2f", $1 * 100}')"
-        if [[ "$bibd" == "true" ]] || [[ "${bblocks:-0}" -lt "${bheaders:-0}" ]] || LC_ALL=C awk "BEGIN {exit (${bpct:-0} >= 99.99)}" 2>/dev/null; then
+        local bblocks bheaders bpct _bsize bibd snapshot
+        snapshot="$(domain_parse_bitcoin_sync_snapshot "$_cached_binfo" 2>/dev/null)" || snapshot=""
+        if [[ -n "$snapshot" ]]; then
+            IFS=$'\t' read -r bblocks bheaders bpct _bsize bibd <<< "$snapshot"
+        fi
+        if domain_bitcoin_sync_active "${bblocks:-0}" "${bheaders:-0}" "${bpct:-0}" "${bibd:-false}"; then
             bitcoin_sync_detail="sync (${bpct}%)"
         fi
     fi
@@ -117,20 +116,17 @@ show_bitcoin_status() {
         }
     fi
 
-    local chain blocks headers progress size
+    local chain blocks headers pct size_gb _ibd snapshot
     chain="$(echo "$info" | jq -r '.chain')"
-    blocks="$(echo "$info" | jq -r '.blocks')"
-    headers="$(echo "$info" | jq -r '.headers')"
-    progress="$(echo "$info" | jq -r '.verificationprogress')"
-    size="$(echo "$info" | jq -r '.size_on_disk')"
-
-    # Convert progress to percentage
-    local pct
-    pct="$(echo "$progress" | LC_ALL=C awk '{printf "%.2f", $1 * 100}')"
-
-    # Convert size to GB
-    local size_gb
-    size_gb="$(echo "$size" | awk '{printf "%.1f", $1 / 1073741824}')"
+    snapshot="$(domain_parse_bitcoin_sync_snapshot "$info" 2>/dev/null)" || snapshot=""
+    if [[ -n "$snapshot" ]]; then
+        IFS=$'\t' read -r blocks headers pct size_gb _ibd <<< "$snapshot"
+    else
+        blocks="$(echo "$info" | jq -r '.blocks')"
+        headers="$(echo "$info" | jq -r '.headers')"
+        pct="$(echo "$(echo "$info" | jq -r '.verificationprogress')" | LC_ALL=C awk '{printf "%.2f", $1 * 100}')"
+        size_gb="$(echo "$(echo "$info" | jq -r '.size_on_disk')" | awk '{printf "%.1f", $1 / 1073741824}')"
+    fi
 
     echo -e "  ${BOLD}Bitcoin Core${NC} ${DIM}(${chain})${NC}"
     echo -e "    Blocks:  ${blocks} / ${headers}"
@@ -138,7 +134,7 @@ show_bitcoin_status() {
 
     # Progress bar (progress_bar already outputs a trailing newline)
     printf '  '
-    progress_bar "$progress" 1 30 ""
+    progress_bar "$pct" 100 30 ""
 
     # Peer info
     local peers

@@ -743,3 +743,33 @@ teardown() {
     run _wallet_already_exists
     [[ "$status" -ne 0 ]]
 }
+
+# ============================================================
+# domain status helpers
+# ============================================================
+
+@test "domain_parse_bitcoin_sync_snapshot: parses expected fields" {
+    local info
+    info='{"blocks":123,"headers":456,"verificationprogress":0.5,"size_on_disk":2147483648,"initialblockdownload":true}'
+    local out
+    out="$(domain_parse_bitcoin_sync_snapshot "$info")"
+    [[ "$out" == $'123\t456\t50.00\t2.0\ttrue' ]]
+}
+
+@test "domain_parse_bitcoin_sync_snapshot: fails on empty input" {
+    run domain_parse_bitcoin_sync_snapshot ""
+    [[ "$status" -ne 0 ]]
+}
+
+@test "domain_bitcoin_sync_active: true when ibd=true" {
+    domain_bitcoin_sync_active 100 100 100.00 true
+}
+
+@test "domain_bitcoin_sync_active: true when blocks are behind headers" {
+    domain_bitcoin_sync_active 99 100 99.99 false
+}
+
+@test "domain_bitcoin_sync_active: false when fully synced" {
+    run domain_bitcoin_sync_active 100 100 100.00 false
+    [[ "$status" -ne 0 ]]
+}

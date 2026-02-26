@@ -18,6 +18,7 @@ dc_exec() { echo "MOCK_DC_EXEC $*"; return 0; }
 
 source "${AWNING_DIR}/lib/setup.sh"
 source "${AWNING_DIR}/lib/docker.sh"
+source "${AWNING_DIR}/lib/domain/status.sh"
 
 # Source validate_env from awning.sh (extract the function only)
 eval "$(sed -n '/^validate_env()/,/^}/p' "${AWNING_DIR}/awning.sh")"
