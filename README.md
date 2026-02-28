@@ -25,7 +25,7 @@ After setup completes, **write down the 24-word recovery seed** — it is shown 
 
 
 <div align="center">
-  <video src="https://github.com/user-attachments/assets/8ae1fbd2-9298-48f7-81fc-df09a8b06f3f" autoplay muted loop playsinline controls></video>
+  <video src="https://github.com/user-attachments/assets/368aa903-d42a-4874-b6d3-39d3762e70a0" autoplay muted loop playsinline controls></video>
 </div>
 
 
