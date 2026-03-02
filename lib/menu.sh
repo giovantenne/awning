@@ -218,10 +218,24 @@ show_menu() {
                 "${svc_list[@]}" 2>/dev/null)" || output=""
 
             # Fetch bitcoin blockchain info (1 docker exec call)
-            local binfo=""
+            local binfo="" presync_pct=""
             # Check if bitcoin is in the output as running before querying RPC
             if echo "$output" | grep -q '/bitcoin running'; then
                 binfo="$(bitcoin_cli getblockchaininfo 2>/dev/null)" || binfo=""
+                # When headers are still 0, parse pre-sync % from container logs
+                if [[ -z "$binfo" ]] || echo "$binfo" | jq -e '.headers == 0' &>/dev/null; then
+                    local logs
+                    logs="$(dc_logs --tail 400 --no-color bitcoin 2>/dev/null)" || logs=""
+                    presync_pct="$(echo "$logs" | awk '
+                        /Pre-synchronizing blockheaders/ {
+                            if (match($0, /~?[0-9]+([.][0-9]+)?%/)) {
+                                v = substr($0, RSTART, RLENGTH)
+                            }
+                        }
+                        END { if (v != "") print v }
+                    ')"
+                    presync_pct="${presync_pct#\~}"
+                fi
             fi
 
             # Write results atomically
@@ -229,6 +243,7 @@ show_menu() {
             {
                 echo "BG_DOCKER_OUTPUT=$(echo "$output" | base64 -w0)"
                 echo "BG_BINFO=$(echo "$binfo" | base64 -w0)"
+                echo "BG_PRESYNC_PCT=${presync_pct}"
                 echo "BG_TIMESTAMP=$(date +%s)"
             } > "$tmpfile"
             mv -f "$tmpfile" "$_bg_refresh_file"
@@ -240,14 +255,15 @@ show_menu() {
     _consume_bg_refresh() {
         [[ -f "$_bg_refresh_file" ]] || return 1
 
-        local bg_docker_output="" bg_binfo="" bg_timestamp=""
-        local BG_DOCKER_OUTPUT="" BG_BINFO="" BG_TIMESTAMP=""
+        local bg_docker_output="" bg_binfo="" bg_presync_pct="" bg_timestamp=""
+        local BG_DOCKER_OUTPUT="" BG_BINFO="" BG_PRESYNC_PCT="" BG_TIMESTAMP=""
         # shellcheck disable=SC1090
         source "$_bg_refresh_file" 2>/dev/null || return 1
         rm -f "$_bg_refresh_file"
 
         bg_docker_output="$(echo "$BG_DOCKER_OUTPUT" | base64 -d 2>/dev/null)" || bg_docker_output=""
         bg_binfo="$(echo "$BG_BINFO" | base64 -d 2>/dev/null)" || bg_binfo=""
+        bg_presync_pct="$BG_PRESYNC_PCT"
         bg_timestamp="$BG_TIMESTAMP"
 
         # Reap background process
@@ -271,28 +287,48 @@ show_menu() {
         done <<< "$bg_docker_output"
         _DC_CACHE_TIMESTAMP="$bg_timestamp"
 
-        # Update sync data from background bitcoin info
-        _sync_active=false
-        _sync_blocks=0
-        _sync_headers=0
-        _sync_pct="0.00"
-        _sync_size_gb="0.0"
-
-        if dc_cached_is_running bitcoin && [[ -n "$bg_binfo" ]]; then
-            local snapshot ibd
-            snapshot="$(domain_parse_bitcoin_sync_snapshot "$bg_binfo" 2>/dev/null)" || snapshot=""
-            if [[ -n "$snapshot" ]]; then
-                IFS=$'\t' read -r _sync_blocks _sync_headers _sync_pct _sync_size_gb ibd <<< "$snapshot"
-                if [[ "${_sync_headers}" -eq 0 ]]; then
-                    # Keep existing _sync_presync_pct — don't fetch logs in foreground
-                    true
-                else
-                    _sync_presync_pct=""
+        # Update sync data from background bitcoin info.
+        # When bitcoin is running but RPC is not yet available (binfo empty),
+        # keep the current _sync_active state instead of resetting to false.
+        # This avoids an oscillation loop where:
+        #   bg sets _sync_active=false → differs from _sync_visible=true →
+        #   triggers full foreground render → foreground calls bitcoin_cli
+        #   (blocking UI for seconds) → fails again → repeat every 5s.
+        if dc_cached_is_running bitcoin; then
+            if [[ -n "$bg_binfo" ]]; then
+                local snapshot ibd
+                snapshot="$(domain_parse_bitcoin_sync_snapshot "$bg_binfo" 2>/dev/null)" || snapshot=""
+                if [[ -n "$snapshot" ]]; then
+                    IFS=$'\t' read -r _sync_blocks _sync_headers _sync_pct _sync_size_gb ibd <<< "$snapshot"
+                    if [[ "${_sync_headers}" -eq 0 ]]; then
+                        # Update pre-sync percentage from background log parsing
+                        [[ -n "$bg_presync_pct" ]] && _sync_presync_pct="$bg_presync_pct"
+                    else
+                        _sync_presync_pct=""
+                    fi
+                    if domain_bitcoin_sync_active "${_sync_blocks}" "${_sync_headers}" "${_sync_pct}" "$ibd"; then
+                        _sync_active=true
+                    else
+                        _sync_active=false
+                    fi
                 fi
-                if domain_bitcoin_sync_active "${_sync_blocks}" "${_sync_headers}" "${_sync_pct}" "$ibd"; then
+                # If snapshot parsing failed, keep current _sync_active
+            else
+                # RPC not yet available but container is running — keep
+                # current state and update pre-sync % if available.
+                [[ -n "$bg_presync_pct" ]] && _sync_presync_pct="$bg_presync_pct"
+                # If we were previously showing the panel, keep showing it
+                # so the user sees the spinner + updated pre-sync %.
+                if [[ "$_sync_visible" == "true" ]]; then
                     _sync_active=true
                 fi
             fi
+        else
+            _sync_active=false
+            _sync_blocks=0
+            _sync_headers=0
+            _sync_pct="0.00"
+            _sync_size_gb="0.0"
         fi
 
         return 0
@@ -310,7 +346,7 @@ show_menu() {
         prompt="$(echo -e "${YELLOW}Choose [0-6]:${NC} ")"
         printf "  %b" "$prompt"
 
-        local ticks=0
+        local ticks=33
         while true; do
             if read -r -t 0.15 choice; then
                 break
