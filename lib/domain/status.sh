@@ -10,16 +10,24 @@ domain_bitcoin_blockchain_info() {
 # Parse blockchaininfo JSON and print tab-separated fields:
 # blocks headers progress_pct size_gb initial_block_download
 # Returns non-zero when input is empty/invalid.
+# Uses a single jq invocation (instead of 5 separate calls) to minimise
+# subprocess overhead — especially important when jq runs via Docker fallback.
 domain_parse_bitcoin_sync_snapshot() {
     local info="$1"
     [[ -n "$info" ]] || return 1
 
+    local raw
+    raw="$(echo "$info" | jq -r '[
+        (.blocks // 0),
+        (.headers // 0),
+        (.verificationprogress // 0),
+        (.size_on_disk // 0),
+        (.initialblockdownload // false)
+    ] | @tsv')" || return 1
+    [[ -n "$raw" ]] || return 1
+
     local blocks headers progress size_bytes ibd
-    blocks="$(echo "$info" | jq -r '.blocks // 0')" || return 1
-    headers="$(echo "$info" | jq -r '.headers // 0')" || return 1
-    progress="$(echo "$info" | jq -r '.verificationprogress // 0')" || return 1
-    size_bytes="$(echo "$info" | jq -r '.size_on_disk // 0')" || return 1
-    ibd="$(echo "$info" | jq -r '.initialblockdownload // false')" || return 1
+    IFS=$'\t' read -r blocks headers progress size_bytes ibd <<< "$raw"
 
     local progress_pct size_gb
     progress_pct="$(echo "$progress" | LC_ALL=C awk '{printf "%.2f", $1 * 100}')"

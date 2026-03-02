@@ -475,6 +475,73 @@ dc_is_running() {
     [[ "$status" == "running" ]]
 }
 
+# ============================================================
+# Status cache: batch docker inspect for all services at once
+# ============================================================
+# Replaces N individual `docker inspect` calls with a single batch call.
+# The cache is stored in associative arrays keyed by service name.
+# Usage:
+#   dc_refresh_status_cache          # one docker call for all services
+#   dc_cached_status "bitcoin"       # instant lookup
+#   dc_cached_health "bitcoin"       # instant lookup
+#   dc_cached_is_running "bitcoin"   # instant lookup
+
+declare -gA _DC_STATUS_CACHE=()
+declare -gA _DC_HEALTH_CACHE=()
+declare -g  _DC_CACHE_TIMESTAMP=0
+
+# Fetch status+health for all active services in a single docker inspect call
+# and populate the _DC_STATUS_CACHE / _DC_HEALTH_CACHE associative arrays.
+dc_refresh_status_cache() {
+    _DC_STATUS_CACHE=()
+    _DC_HEALTH_CACHE=()
+
+    local services
+    read -ra services <<< "$(dc_active_services)"
+    [[ ${#services[@]} -eq 0 ]] && return 0
+
+    # Single docker inspect for all containers at once.
+    # Output format: one line per container: "name status health"
+    # Health is empty string when no healthcheck is configured.
+    local output
+    output="$(_docker inspect \
+        --format '{{.Name}} {{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{else}}{{end}}' \
+        "${services[@]}" 2>/dev/null)" || return 0
+
+    local line name status health
+    while IFS= read -r line; do
+        [[ -z "$line" ]] && continue
+        # .Name has a leading "/" — strip it
+        name="${line%% *}"
+        name="${name#/}"
+        line="${line#* }"
+        status="${line%% *}"
+        health="${line#* }"
+        # If status and health are the same token, there was no health field
+        [[ "$health" == "$status" ]] && health=""
+
+        _DC_STATUS_CACHE["$name"]="$status"
+        _DC_HEALTH_CACHE["$name"]="$health"
+    done <<< "$output"
+
+    _DC_CACHE_TIMESTAMP="$(date +%s)"
+}
+
+# Read status from cache (empty string if not cached).
+dc_cached_status() {
+    echo "${_DC_STATUS_CACHE[$1]:-}"
+}
+
+# Read health from cache (empty string if not cached).
+dc_cached_health() {
+    echo "${_DC_HEALTH_CACHE[$1]:-}"
+}
+
+# Check if a service is running according to the cache.
+dc_cached_is_running() {
+    [[ "${_DC_STATUS_CACHE[$1]:-}" == "running" ]]
+}
+
 # Check if services are built
 dc_is_built() {
     _docker image ls --format '{{.Repository}}' 2>/dev/null | grep -q "awning"

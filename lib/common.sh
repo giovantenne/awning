@@ -574,6 +574,20 @@ count_running_services() {
     echo "$count"
 }
 
+# Count running services using cached status (no Docker calls).
+# Requires dc_refresh_status_cache to have been called first.
+count_running_services_cached() {
+    local count=0
+    local service services
+    read -ra services <<< "$(dc_active_services)"
+    for service in "${services[@]}"; do
+        if dc_cached_is_running "$service"; then
+            count=$((count + 1))
+        fi
+    done
+    echo "$count"
+}
+
 # Get overall status label
 get_status_label() {
     if [[ ! -f "$(awning_path .env)" ]]; then
@@ -611,6 +625,54 @@ get_status_label() {
                     # Services without healthcheck are considered ready when running.
                     healthy=$((healthy + 1))
                     ;;
+            esac
+        elif [[ "$status" == "restarting" ]]; then
+            starting=$((starting + 1))
+        fi
+    done
+
+    if [[ "$running" -eq "$total" ]] && [[ "$healthy" -eq "$total" ]]; then
+        echo -e "${GREEN}All services healthy${NC}"
+    elif [[ "$running" -eq "$total" ]] && [[ "$starting" -gt 0 ]]; then
+        echo -e "${YELLOW}Services starting (${starting})${NC}"
+    elif [[ "$unhealthy" -gt 0 ]]; then
+        echo -e "${RED}${unhealthy} service(s) unhealthy${NC}"
+    elif [[ "$running" -gt 0 ]]; then
+        echo -e "${YELLOW}${running}/${total} services running${NC}"
+    else
+        echo -e "${DIM}Services stopped${NC}"
+    fi
+}
+
+# Get overall status label using cached status (no Docker calls).
+# Requires dc_refresh_status_cache to have been called first.
+get_status_label_cached() {
+    if [[ ! -f "$(awning_path .env)" ]]; then
+        echo "Not configured"
+        return
+    fi
+
+    local svc_list
+    read -ra svc_list <<< "$(dc_active_services)"
+    local total running healthy starting unhealthy
+    total=${#svc_list[@]}
+    running=0
+    healthy=0
+    starting=0
+    unhealthy=0
+
+    local service status health
+    for service in "${svc_list[@]}"; do
+        status="$(dc_cached_status "$service")"
+        health="$(dc_cached_health "$service")"
+
+        if [[ "$status" == "running" ]]; then
+            running=$((running + 1))
+            case "$health" in
+                healthy)  healthy=$((healthy + 1)) ;;
+                starting) starting=$((starting + 1)) ;;
+                unhealthy) unhealthy=$((unhealthy + 1)) ;;
+                *)        healthy=$((healthy + 1)) ;;
             esac
         elif [[ "$status" == "restarting" ]]; then
             starting=$((starting + 1))

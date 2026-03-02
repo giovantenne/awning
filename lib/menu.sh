@@ -17,7 +17,7 @@ show_menu() {
         _sync_size_gb="0.0"
         # Keep last known pre-sync percentage across refreshes while headers are 0.
 
-        dc_is_running bitcoin 2>/dev/null || return 1
+        dc_cached_is_running bitcoin 2>/dev/null || return 1
 
         local info
         info="$(domain_bitcoin_blockchain_info)" || return 1
@@ -130,10 +130,12 @@ show_menu() {
             echo ""
         fi
         _sync_visible="$_sync_active"
-        if [[ "$(count_running_services 2>/dev/null)" -gt 0 ]]; then
+        local _running_count
+        _running_count="$(count_running_services_cached 2>/dev/null)"
+        if [[ "${_running_count:-0}" -gt 0 ]]; then
             local _scb_status _scb_health
-            _scb_status="$(dc_get_status scb 2>/dev/null)" || _scb_status=""
-            _scb_health="$(dc_get_health scb 2>/dev/null)" || _scb_health=""
+            _scb_status="$(dc_cached_status scb 2>/dev/null)" || _scb_status=""
+            _scb_health="$(dc_cached_health scb 2>/dev/null)" || _scb_health=""
             if [[ -z "${SCB_REPO:-}" ]] || [[ "$_scb_status" != "running" ]] || [[ "$_scb_health" != "healthy" ]]; then
                 echo -e "  ${ORANGE}⚠ Channel backups (SCB) are not enabled."
                 echo -e "    Enable them via Tools > Setup Wizard${NC}"
@@ -178,8 +180,122 @@ show_menu() {
     }
 
     refresh_main_menu() {
-        status_label="$(get_status_label 2>/dev/null)" || status_label="${DIM}unknown${NC}"
+        dc_refresh_status_cache 2>/dev/null || true
+        status_label="$(get_status_label_cached 2>/dev/null)" || status_label="${DIM}unknown${NC}"
         render_main_menu "$status_label"
+    }
+
+    # ── Background refresh infrastructure ─────────────────────
+    # Instead of blocking the input loop for 1-3 seconds every ~5s,
+    # we spawn a background subshell that writes fresh data to a tmpfile.
+    # The foreground loop picks it up on the next tick (~150ms latency).
+    local _bg_refresh_dir
+    _bg_refresh_dir="$(mktemp -d)"
+    local _bg_refresh_file="${_bg_refresh_dir}/status"
+    local _bg_pid=""
+
+    _cleanup_bg_refresh() {
+        [[ -n "$_bg_pid" ]] && kill "$_bg_pid" 2>/dev/null && wait "$_bg_pid" 2>/dev/null || true
+        _bg_pid=""
+        rm -rf "$_bg_refresh_dir" 2>/dev/null || true
+    }
+    trap '_cleanup_bg_refresh' RETURN
+
+    # Launch a background subshell to fetch fresh status + sync data.
+    # Writes a simple key=value file that the foreground can source.
+    _start_bg_refresh() {
+        # Don't stack multiple background refreshes
+        if [[ -n "$_bg_pid" ]] && kill -0 "$_bg_pid" 2>/dev/null; then
+            return
+        fi
+        (
+            # Fetch container status (1 docker inspect call for all services)
+            local services svc_list
+            read -ra svc_list <<< "$(dc_active_services)"
+            local output
+            output="$(_docker inspect \
+                --format '{{.Name}} {{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{else}}{{end}}' \
+                "${svc_list[@]}" 2>/dev/null)" || output=""
+
+            # Fetch bitcoin blockchain info (1 docker exec call)
+            local binfo=""
+            # Check if bitcoin is in the output as running before querying RPC
+            if echo "$output" | grep -q '/bitcoin running'; then
+                binfo="$(bitcoin_cli getblockchaininfo 2>/dev/null)" || binfo=""
+            fi
+
+            # Write results atomically
+            local tmpfile="${_bg_refresh_dir}/.status.tmp"
+            {
+                echo "BG_DOCKER_OUTPUT=$(echo "$output" | base64 -w0)"
+                echo "BG_BINFO=$(echo "$binfo" | base64 -w0)"
+                echo "BG_TIMESTAMP=$(date +%s)"
+            } > "$tmpfile"
+            mv -f "$tmpfile" "$_bg_refresh_file"
+        ) &
+        _bg_pid=$!
+    }
+
+    # Read background results if available. Returns 1 if nothing new.
+    _consume_bg_refresh() {
+        [[ -f "$_bg_refresh_file" ]] || return 1
+
+        local bg_docker_output="" bg_binfo="" bg_timestamp=""
+        local BG_DOCKER_OUTPUT="" BG_BINFO="" BG_TIMESTAMP=""
+        # shellcheck disable=SC1090
+        source "$_bg_refresh_file" 2>/dev/null || return 1
+        rm -f "$_bg_refresh_file"
+
+        bg_docker_output="$(echo "$BG_DOCKER_OUTPUT" | base64 -d 2>/dev/null)" || bg_docker_output=""
+        bg_binfo="$(echo "$BG_BINFO" | base64 -d 2>/dev/null)" || bg_binfo=""
+        bg_timestamp="$BG_TIMESTAMP"
+
+        # Reap background process
+        [[ -n "$_bg_pid" ]] && wait "$_bg_pid" 2>/dev/null || true
+        _bg_pid=""
+
+        # Update status cache from background data
+        _DC_STATUS_CACHE=()
+        _DC_HEALTH_CACHE=()
+        local line name status health
+        while IFS= read -r line; do
+            [[ -z "$line" ]] && continue
+            name="${line%% *}"
+            name="${name#/}"
+            line="${line#* }"
+            status="${line%% *}"
+            health="${line#* }"
+            [[ "$health" == "$status" ]] && health=""
+            _DC_STATUS_CACHE["$name"]="$status"
+            _DC_HEALTH_CACHE["$name"]="$health"
+        done <<< "$bg_docker_output"
+        _DC_CACHE_TIMESTAMP="$bg_timestamp"
+
+        # Update sync data from background bitcoin info
+        _sync_active=false
+        _sync_blocks=0
+        _sync_headers=0
+        _sync_pct="0.00"
+        _sync_size_gb="0.0"
+
+        if dc_cached_is_running bitcoin && [[ -n "$bg_binfo" ]]; then
+            local snapshot ibd
+            snapshot="$(domain_parse_bitcoin_sync_snapshot "$bg_binfo" 2>/dev/null)" || snapshot=""
+            if [[ -n "$snapshot" ]]; then
+                IFS=$'\t' read -r _sync_blocks _sync_headers _sync_pct _sync_size_gb ibd <<< "$snapshot"
+                if [[ "${_sync_headers}" -eq 0 ]]; then
+                    # Keep existing _sync_presync_pct — don't fetch logs in foreground
+                    true
+                else
+                    _sync_presync_pct=""
+                fi
+                if domain_bitcoin_sync_active "${_sync_blocks}" "${_sync_headers}" "${_sync_pct}" "$ibd"; then
+                    _sync_active=true
+                fi
+            fi
+        fi
+
+        return 0
     }
 
     local status_label
@@ -202,27 +318,33 @@ show_menu() {
 
             ticks=$((ticks + 1))
             _update_sync_spinner
-            if (( ticks < 33 )); then
-                continue
-            fi
-            ticks=0
 
-            # Refresh subtitle and sync panel together
-            local next_status_label
-            next_status_label="$(get_status_label 2>/dev/null)" || next_status_label="${DIM}unknown${NC}"
-            _fetch_sync_data || true
+            # Check if background refresh has completed (non-blocking read)
+            if _consume_bg_refresh; then
+                local next_status_label
+                next_status_label="$(get_status_label_cached 2>/dev/null)" || next_status_label="${DIM}unknown${NC}"
 
-            if [[ "$_sync_active" != "$_sync_visible" ]]; then
-                # Visibility changed — full redraw
-                status_label="$next_status_label"
-                render_main_menu "$status_label"
-                printf "  %b" "$prompt"
-            else
-                if [[ "$next_status_label" != "$status_label" ]]; then
+                if [[ "$_sync_active" != "$_sync_visible" ]]; then
                     status_label="$next_status_label"
-                    _update_subtitle "$status_label"
+                    render_main_menu "$status_label"
+                    printf "  %b" "$prompt"
+                else
+                    if [[ "$next_status_label" != "$status_label" ]]; then
+                        status_label="$next_status_label"
+                        _update_subtitle "$status_label"
+                    fi
+                    _update_sync_panel || {
+                        status_label="$next_status_label"
+                        render_main_menu "$status_label"
+                        printf "  %b" "$prompt"
+                    }
                 fi
-                _update_sync_panel || true
+            fi
+
+            # Launch a new background refresh every ~5 seconds
+            if (( ticks >= 33 )); then
+                ticks=0
+                _start_bg_refresh
             fi
         done
 
@@ -234,7 +356,7 @@ show_menu() {
             4) menu_wallet; refresh_main_menu ;;
             5) menu_tools; refresh_main_menu ;;
             6) menu_system; refresh_main_menu ;;
-            0|q|Q) echo ""; exit 0 ;;
+            0|q|Q) echo ""; _cleanup_bg_refresh; exit 0 ;;
             *) print_warn "Invalid choice"; sleep 0.5; render_main_menu "$status_label" ;;
         esac
     done
