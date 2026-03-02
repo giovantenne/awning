@@ -116,17 +116,15 @@ show_bitcoin_status() {
         }
     fi
 
-    local chain blocks headers pct size_gb _ibd snapshot
+    local chain blocks headers pct size_gb _ibd
     chain="$(echo "$info" | jq -r '.chain')"
-    snapshot="$(domain_parse_bitcoin_sync_snapshot "$info" 2>/dev/null)" || snapshot=""
-    if [[ -n "$snapshot" ]]; then
-        IFS=$'\t' read -r blocks headers pct size_gb _ibd <<< "$snapshot"
-    else
-        blocks="$(echo "$info" | jq -r '.blocks')"
-        headers="$(echo "$info" | jq -r '.headers')"
-        pct="$(echo "$(echo "$info" | jq -r '.verificationprogress')" | LC_ALL=C awk '{printf "%.2f", $1 * 100}')"
-        size_gb="$(echo "$(echo "$info" | jq -r '.size_on_disk')" | awk '{printf "%.1f", $1 / 1073741824}')"
-    fi
+    local snapshot
+    snapshot="$(domain_parse_bitcoin_sync_snapshot "$info" 2>/dev/null)" || {
+        print_warn "Cannot parse blockchain info"
+        echo ""
+        return
+    }
+    IFS=$'\t' read -r blocks headers pct size_gb _ibd <<< "$snapshot"
 
     echo -e "  ${BOLD}Bitcoin Core${NC} ${DIM}(${chain})${NC}"
     echo -e "    Blocks:  ${blocks} / ${headers}"

@@ -1,12 +1,9 @@
 #!/bin/bash
-# Awning v2: Interactive management menu
-# Boxed header with live status, 6 organized categories
-# All submenus have clear screen, back option, and robust input handling
-
-# Split screen modules to keep this file focused on main menu orchestration.
-source "${AWNING_DIR}/lib/ui/screens/system.sh"
-source "${AWNING_DIR}/lib/ui/screens/wallet.sh"
-source "${AWNING_DIR}/lib/ui/screens/backup.sh"
+# Awning v2: Interactive management menu.
+# Main menu orchestration with live sync panel.
+# Depends on: lib/common.sh, lib/docker.sh, lib/health.sh,
+#             lib/domain/status.sh, lib/domain/wallet.sh,
+#             lib/ui/screens/{system,wallet,backup}.sh
 
 show_menu() {
     # ── Sync data helpers ──────────────────────────────────────

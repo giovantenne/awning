@@ -1,5 +1,8 @@
 #!/bin/bash
-# TUI screens: wallet submenu and helpers
+# TUI screens: wallet submenu and helpers.
+# Depends on: lib/domain/wallet.sh (domain_require_wallet)
+#             lib/health.sh (zeus_connect)
+#             lib/common.sh (UI primitives)
 
 # --- Wallet submenu ---
 menu_wallet() {
@@ -19,31 +22,15 @@ menu_wallet() {
         read -r -p "$(echo -e "  ${YELLOW}Choose [0-5]:${NC} ")" choice
 
         case "$choice" in
-            1) echo ""; require_wallet && show_wallet_balance_ui; menu_pause ;;
-            2) echo ""; require_wallet && show_channel_balance_ui; menu_pause ;;
-            3) echo ""; require_wallet && show_new_address_ui; menu_pause ;;
+            1) echo ""; domain_require_wallet && show_wallet_balance_ui; menu_pause ;;
+            2) echo ""; domain_require_wallet && show_channel_balance_ui; menu_pause ;;
+            3) echo ""; domain_require_wallet && show_new_address_ui; menu_pause ;;
             4) zeus_connect; menu_pause ;;
             5) echo ""; show_auto_unlock_password_ui; menu_pause ;;
             0|"") return ;;
             *) print_warn "Invalid choice"; sleep 0.5 ;;
         esac
     done
-}
-
-# Guard: check wallet is initialized, print warning if not.
-# Returns 0 if wallet is ready, 1 otherwise.
-require_wallet() {
-    if has_admin_macaroon; then
-        return 0
-    fi
-    print_warn "Wallet not initialized yet. Run setup first."
-    return 1
-}
-
-has_admin_macaroon() {
-    local path
-    path="$(awning_path "data/lnd/${ADMIN_MACAROON_SUBPATH}")"
-    [[ -f "$path" ]]
 }
 
 show_auto_unlock_password_ui() {

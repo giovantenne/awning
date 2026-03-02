@@ -1,5 +1,6 @@
 #!/bin/bash
-# TUI screens: backup (SCB) submenu
+# TUI screens: backup (SCB) submenu.
+# Depends on: lib/common.sh (UI primitives), lib/docker.sh (dc_*)
 
 # --- Backup submenu ---
 menu_backup() {

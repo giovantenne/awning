@@ -1,5 +1,6 @@
 #!/bin/bash
-# TUI screens: system lifecycle and update/rebuild flows
+# TUI screens: system lifecycle and update/rebuild flows.
+# Depends on: lib/common.sh (UI primitives), lib/docker.sh (dc_*)
 
 menu_system() {
     clear 2>/dev/null || true

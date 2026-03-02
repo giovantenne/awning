@@ -1,5 +1,6 @@
 #!/bin/bash
 # Domain helpers: service status and sync derivation.
+# Depends on: lib/docker.sh (bitcoin_cli), jq, awk
 
 # Return bitcoin getblockchaininfo JSON, empty on failure.
 domain_bitcoin_blockchain_info() {
@@ -33,8 +34,6 @@ domain_parse_bitcoin_sync_snapshot() {
 # - initialblockdownload=true, or
 # - blocks < headers, or
 # - verification progress < 99.99
-# shellcheck disable=SC2317
-# (function is consumed dynamically by sourced modules)
 domain_bitcoin_sync_active() {
     local blocks="$1" headers="$2" progress_pct="$3" ibd="$4"
 

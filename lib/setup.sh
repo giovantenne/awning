@@ -74,7 +74,33 @@ run_setup() {
   local ignore_disk_space="${1:-0}"
   maybe_require_first_run_disclaimer || return 1
   draw_header "AWNING SETUP" "Bitcoin + Lightning Node"
-  setup_run_wizard_flow "$ignore_disk_space"
+  _setup_wizard_flow "$ignore_disk_space"
+}
+
+# Wizard flow: run each setup step in sequence.
+_setup_wizard_flow() {
+  local ignore_disk_space="${1:-0}"
+
+  step_prerequisites "$ignore_disk_space"
+  step_node_config
+  step_scb_config
+  step_rtl_config
+  step_generate_configs
+  if ! step_build_and_start; then
+    return 1
+  fi
+  if ! step_initialize_wallet; then
+    return 1
+  fi
+
+  _setup_print_completion
+}
+
+_setup_print_completion() {
+  echo ""
+  echo -e "  ${ICON_BOLT} ${BOLD}Setup complete!${NC} Bitcoin sync will take several days."
+  echo -e "  Run ${CYAN}./awning.sh${NC} again to access the management menu."
+  echo ""
 }
 
 # ============================================================

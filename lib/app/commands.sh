@@ -1,7 +1,9 @@
 #!/bin/bash
 # Application command dispatcher.
+# Depends on: lib/setup.sh, lib/docker.sh, lib/health.sh, lib/menu.sh,
+#             lib/domain/wallet.sh, lib/ui/screens/wallet.sh
 
-awning_dispatch_command() {
+app_dispatch_command() {
     local command="$1"
     local setup_ignore_disk_space="${2:-0}"
 
@@ -73,13 +75,13 @@ awning_dispatch_command() {
 
         # Wallet
         wallet-balance)
-            require_wallet && show_wallet_balance_ui
+            domain_require_wallet && show_wallet_balance_ui
             ;;
         channel-balance)
-            require_wallet && show_channel_balance_ui
+            domain_require_wallet && show_channel_balance_ui
             ;;
         new-address)
-            require_wallet && show_new_address_ui
+            domain_require_wallet && show_new_address_ui
             ;;
         zeus-connect)
             zeus_connect

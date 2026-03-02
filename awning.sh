@@ -22,10 +22,13 @@ fi
 source "${AWNING_DIR}/lib/common.sh"
 source "${AWNING_DIR}/lib/docker.sh"
 source "${AWNING_DIR}/lib/setup.sh"
-source "${AWNING_DIR}/lib/app/commands.sh"
-source "${AWNING_DIR}/lib/domain/setup_flow.sh"
 source "${AWNING_DIR}/lib/domain/status.sh"
+source "${AWNING_DIR}/lib/domain/wallet.sh"
 source "${AWNING_DIR}/lib/health.sh"
+source "${AWNING_DIR}/lib/app/commands.sh"
+source "${AWNING_DIR}/lib/ui/screens/system.sh"
+source "${AWNING_DIR}/lib/ui/screens/wallet.sh"
+source "${AWNING_DIR}/lib/ui/screens/backup.sh"
 source "${AWNING_DIR}/lib/menu.sh"
 
 # Load .env safely (do not execute shell expressions from config values)
@@ -201,7 +204,7 @@ main() {
             ;;
     esac
 
-    awning_dispatch_command "$command" "$setup_ignore_disk_space" "${@:2}"
+    app_dispatch_command "$command" "$setup_ignore_disk_space" "${@:2}"
 }
 
 show_help() {

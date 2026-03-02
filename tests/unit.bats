@@ -271,19 +271,19 @@ teardown() {
 # ============================================================
 
 @test "validate_env: passes with valid values" {
+    AWNING_DIR="$TEST_TMPDIR"
+    touch "${AWNING_DIR}/.env"
     export HOST_UID=1000 HOST_GID=1000
     export BITCOIN_ARCH=x86_64 LND_ARCH=amd64
     export BITCOIN_CORE_VERSION=30.2 LND_VERSION=0.20.1-beta ELECTRS_VERSION=0.11.0
     export LND_REST_PORT=8080 ELECTRS_SSL_PORT=50002 RTL_PORT=3000
     export LND_REST_BIND=127.0.0.1 ELECTRS_SSL_BIND=127.0.0.1 RTL_BIND=0.0.0.0
-    # Create a minimal .env so validate_env runs
-    printf 'HOST_UID=1000\n' > "${AWNING_DIR}/.env.test"
-    AWNING_DIR_ORIG="$AWNING_DIR"
-    # Override to use test env
     validate_env
 }
 
 @test "validate_env: rejects non-numeric port" {
+    AWNING_DIR="$TEST_TMPDIR"
+    touch "${AWNING_DIR}/.env"
     export HOST_UID=1000 HOST_GID=1000
     export LND_REST_PORT="abc"
     export BITCOIN_ARCH="" LND_ARCH="" BITCOIN_CORE_VERSION="" LND_VERSION="" ELECTRS_VERSION=""
@@ -295,6 +295,8 @@ teardown() {
 }
 
 @test "validate_env: rejects invalid architecture" {
+    AWNING_DIR="$TEST_TMPDIR"
+    touch "${AWNING_DIR}/.env"
     export HOST_UID=1000 HOST_GID=1000
     export BITCOIN_ARCH="mips" LND_ARCH=""
     export BITCOIN_CORE_VERSION="" LND_VERSION="" ELECTRS_VERSION=""
@@ -306,6 +308,8 @@ teardown() {
 }
 
 @test "validate_env: rejects non-numeric UID" {
+    AWNING_DIR="$TEST_TMPDIR"
+    touch "${AWNING_DIR}/.env"
     export HOST_UID="abc" HOST_GID=1000
     export BITCOIN_ARCH="" LND_ARCH=""
     export BITCOIN_CORE_VERSION="" LND_VERSION="" ELECTRS_VERSION=""
@@ -533,6 +537,8 @@ teardown() {
 # ============================================================
 
 @test "validate_env: rejects port 0" {
+    AWNING_DIR="$TEST_TMPDIR"
+    touch "${AWNING_DIR}/.env"
     export HOST_UID=1000 HOST_GID=1000
     export LND_REST_PORT=0
     export BITCOIN_ARCH="" LND_ARCH="" BITCOIN_CORE_VERSION="" LND_VERSION="" ELECTRS_VERSION=""
@@ -544,6 +550,8 @@ teardown() {
 }
 
 @test "validate_env: rejects port 65536" {
+    AWNING_DIR="$TEST_TMPDIR"
+    touch "${AWNING_DIR}/.env"
     export HOST_UID=1000 HOST_GID=1000
     export RTL_PORT=65536
     export BITCOIN_ARCH="" LND_ARCH="" BITCOIN_CORE_VERSION="" LND_VERSION="" ELECTRS_VERSION=""
@@ -555,6 +563,8 @@ teardown() {
 }
 
 @test "validate_env: rejects hostname as bind address" {
+    AWNING_DIR="$TEST_TMPDIR"
+    touch "${AWNING_DIR}/.env"
     export HOST_UID=1000 HOST_GID=1000
     export LND_REST_BIND="localhost"
     export BITCOIN_ARCH="" LND_ARCH="" BITCOIN_CORE_VERSION="" LND_VERSION="" ELECTRS_VERSION=""
@@ -566,6 +576,8 @@ teardown() {
 }
 
 @test "validate_env: accepts port 1 and port 65535" {
+    AWNING_DIR="$TEST_TMPDIR"
+    touch "${AWNING_DIR}/.env"
     export HOST_UID=1000 HOST_GID=1000
     export LND_REST_PORT=1 ELECTRS_SSL_PORT=65535 RTL_PORT=3000
     export BITCOIN_ARCH="" LND_ARCH="" BITCOIN_CORE_VERSION="" LND_VERSION="" ELECTRS_VERSION=""
@@ -574,6 +586,8 @@ teardown() {
 }
 
 @test "validate_env: accepts empty optional values" {
+    AWNING_DIR="$TEST_TMPDIR"
+    touch "${AWNING_DIR}/.env"
     export HOST_UID=1000 HOST_GID=1000
     export BITCOIN_ARCH="" LND_ARCH=""
     export BITCOIN_CORE_VERSION="" LND_VERSION="" ELECTRS_VERSION=""
@@ -583,6 +597,8 @@ teardown() {
 }
 
 @test "validate_env: reports multiple errors at once" {
+    AWNING_DIR="$TEST_TMPDIR"
+    touch "${AWNING_DIR}/.env"
     export HOST_UID="bad" HOST_GID="bad"
     export BITCOIN_ARCH="mips" LND_ARCH="sparc"
     export BITCOIN_CORE_VERSION="" LND_VERSION="" ELECTRS_VERSION=""
