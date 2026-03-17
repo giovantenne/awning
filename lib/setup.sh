@@ -886,7 +886,7 @@ step_rtl_config() {
 
     # RTL bind address and port
     local rtl_bind="${RTL_BIND:-127.0.0.1}"
-    local rtl_port="${RTL_PORT:-3000}"
+    local rtl_port="${RTL_PORT:-3001}"
 
     # Save to .env
     local env_file
@@ -1556,7 +1556,7 @@ show_seed_screen() {
     local lan_ip rtl_bind rtl_port rtl_host
     lan_ip="$(get_lan_ip)"
     rtl_bind="${RTL_BIND:-127.0.0.1}"
-    rtl_port="${RTL_PORT:-3000}"
+    rtl_port="${RTL_PORT:-3001}"
     rtl_host="$rtl_bind"
     if [[ "$rtl_bind" == "0.0.0.0" ]]; then
       rtl_host="$lan_ip"
