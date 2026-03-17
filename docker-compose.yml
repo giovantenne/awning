@@ -85,8 +85,8 @@ services:
       - ALL
     security_opt:
       - no-new-privileges:true
-    mem_limit: 512m
-    cpus: 0.5
+    mem_limit: ${LND_MEM_LIMIT:-512m}
+    cpus: ${LND_CPUS:-0.5}
     networks:
       - tor_net
       - awning_net
