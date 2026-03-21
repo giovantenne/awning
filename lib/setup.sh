@@ -42,6 +42,66 @@ _env_set() {
   fi
 }
 
+detect_container_resource_limits() {
+  local total_mem_mb cpu_count
+
+  total_mem_mb="$(awk '/MemTotal:/ {printf "%d", $2 / 1024}' /proc/meminfo 2>/dev/null | head -1)" || true
+  if [[ ! "$total_mem_mb" =~ ^[0-9]+$ ]] || [[ "$total_mem_mb" -le 0 ]]; then
+    total_mem_mb=8192
+  fi
+
+  cpu_count="$(getconf _NPROCESSORS_ONLN 2>/dev/null || true)"
+  if [[ ! "$cpu_count" =~ ^[0-9]+$ ]] || [[ "$cpu_count" -le 0 ]]; then
+    cpu_count="$(nproc 2>/dev/null || true)"
+  fi
+  if [[ ! "$cpu_count" =~ ^[0-9]+$ ]] || [[ "$cpu_count" -le 0 ]]; then
+    cpu_count=4
+  fi
+
+  DETECTED_HOST_MEM_MB="$total_mem_mb"
+  DETECTED_HOST_CPUS="$cpu_count"
+
+  if (( total_mem_mb <= 4096 )); then
+    DETECTED_BITCOIN_MEM_LIMIT="2g"
+    DETECTED_LND_MEM_LIMIT="768m"
+    DETECTED_ELECTRS_MEM_LIMIT="1g"
+  elif (( total_mem_mb <= 8192 )); then
+    DETECTED_BITCOIN_MEM_LIMIT="4g"
+    DETECTED_LND_MEM_LIMIT="1g"
+    DETECTED_ELECTRS_MEM_LIMIT="2g"
+  elif (( total_mem_mb <= 16384 )); then
+    DETECTED_BITCOIN_MEM_LIMIT="6g"
+    DETECTED_LND_MEM_LIMIT="1g"
+    DETECTED_ELECTRS_MEM_LIMIT="3g"
+  else
+    DETECTED_BITCOIN_MEM_LIMIT="8g"
+    DETECTED_LND_MEM_LIMIT="2g"
+    DETECTED_ELECTRS_MEM_LIMIT="4g"
+  fi
+
+  if (( cpu_count <= 2 )); then
+    DETECTED_BITCOIN_CPUS="1.0"
+    DETECTED_LND_CPUS="0.5"
+    DETECTED_ELECTRS_CPUS="0.5"
+  elif (( cpu_count == 3 )); then
+    DETECTED_BITCOIN_CPUS="1.5"
+    DETECTED_LND_CPUS="0.75"
+    DETECTED_ELECTRS_CPUS="0.75"
+  elif (( cpu_count <= 4 )); then
+    DETECTED_BITCOIN_CPUS="2.0"
+    DETECTED_LND_CPUS="1.0"
+    DETECTED_ELECTRS_CPUS="1.0"
+  elif (( cpu_count <= 8 )); then
+    DETECTED_BITCOIN_CPUS="3.0"
+    DETECTED_LND_CPUS="1.0"
+    DETECTED_ELECTRS_CPUS="1.5"
+  else
+    DETECTED_BITCOIN_CPUS="4.0"
+    DETECTED_LND_CPUS="1.5"
+    DETECTED_ELECTRS_CPUS="2.0"
+  fi
+}
+
 maybe_require_first_run_disclaimer() {
   local env_file
   env_file="$(awning_path .env)"
@@ -127,6 +187,16 @@ run_auto_setup() {
   local host_uid host_gid
   host_uid="$(id -u)"
   host_gid="$(id -g)"
+
+  detect_container_resource_limits
+  local bitcoin_mem_limit lnd_mem_limit electrs_mem_limit
+  local bitcoin_cpus lnd_cpus electrs_cpus
+  bitcoin_mem_limit="${BITCOIN_MEM_LIMIT:-$DETECTED_BITCOIN_MEM_LIMIT}"
+  lnd_mem_limit="${LND_MEM_LIMIT:-$DETECTED_LND_MEM_LIMIT}"
+  electrs_mem_limit="${ELECTRS_MEM_LIMIT:-$DETECTED_ELECTRS_MEM_LIMIT}"
+  bitcoin_cpus="${BITCOIN_CPUS:-$DETECTED_BITCOIN_CPUS}"
+  lnd_cpus="${LND_CPUS:-$DETECTED_LND_CPUS}"
+  electrs_cpus="${ELECTRS_CPUS:-$DETECTED_ELECTRS_CPUS}"
 
   # --- Fetch latest versions with spinner ---
   echo ""
@@ -247,6 +317,14 @@ LND_REST_PORT=8080
 ELECTRS_SSL_BIND=127.0.0.1
 ELECTRS_SSL_PORT=50002
 
+# Resource limits (auto-detected from host RAM/CPU; adjust if the host is shared)
+BITCOIN_MEM_LIMIT=${bitcoin_mem_limit}
+BITCOIN_CPUS=${bitcoin_cpus}
+LND_MEM_LIMIT=${lnd_mem_limit}
+LND_CPUS=${lnd_cpus}
+ELECTRS_MEM_LIMIT=${electrs_mem_limit}
+ELECTRS_CPUS=${electrs_cpus}
+
 # RTL (LAN accessible)
 RTL_VERSION=${rtl_version}
 RTL_PASSWORD=${rtl_password}
@@ -262,6 +340,9 @@ EOF
   export BITCOIN_ARCH="$bitcoin_arch" LND_ARCH="$lnd_arch"
   export BITCOIN_CORE_VERSION="$btc_version" LND_VERSION="$lnd_version" ELECTRS_VERSION="$electrs_version"
   export NODE_ALIAS="$node_alias"
+  export BITCOIN_MEM_LIMIT="$bitcoin_mem_limit" BITCOIN_CPUS="$bitcoin_cpus"
+  export LND_MEM_LIMIT="$lnd_mem_limit" LND_CPUS="$lnd_cpus"
+  export ELECTRS_MEM_LIMIT="$electrs_mem_limit" ELECTRS_CPUS="$electrs_cpus"
   export RTL_VERSION="$rtl_version" RTL_PASSWORD="$rtl_password" RTL_BIND="0.0.0.0" RTL_PORT="3001"
   export SCB_REPO=""
 
@@ -626,6 +707,16 @@ step_node_config() {
   host_uid="$(id -u)"
   host_gid="$(id -g)"
 
+  detect_container_resource_limits
+  local bitcoin_mem_limit lnd_mem_limit electrs_mem_limit
+  local bitcoin_cpus lnd_cpus electrs_cpus
+  bitcoin_mem_limit="${BITCOIN_MEM_LIMIT:-$DETECTED_BITCOIN_MEM_LIMIT}"
+  lnd_mem_limit="${LND_MEM_LIMIT:-$DETECTED_LND_MEM_LIMIT}"
+  electrs_mem_limit="${ELECTRS_MEM_LIMIT:-$DETECTED_ELECTRS_MEM_LIMIT}"
+  bitcoin_cpus="${BITCOIN_CPUS:-$DETECTED_BITCOIN_CPUS}"
+  lnd_cpus="${LND_CPUS:-$DETECTED_LND_CPUS}"
+  electrs_cpus="${ELECTRS_CPUS:-$DETECTED_ELECTRS_CPUS}"
+
   # Node alias
   local node_alias
   local current_alias
@@ -669,6 +760,14 @@ LND_REST_BIND=127.0.0.1
 LND_REST_PORT=8080
 ELECTRS_SSL_BIND=127.0.0.1
 ELECTRS_SSL_PORT=50002
+
+# Resource limits (auto-detected from host RAM/CPU; adjust if the host is shared)
+BITCOIN_MEM_LIMIT=${bitcoin_mem_limit}
+BITCOIN_CPUS=${bitcoin_cpus}
+LND_MEM_LIMIT=${lnd_mem_limit}
+LND_CPUS=${lnd_cpus}
+ELECTRS_MEM_LIMIT=${electrs_mem_limit}
+ELECTRS_CPUS=${electrs_cpus}
 EOF
   chmod 600 "$env_file"
 

@@ -34,6 +34,17 @@ gc-canceled-invoices-on-the-fly=true
 ignore-historical-gossip-filters=1
 stagger-initial-reconnect=true
 
+# Bootstrap peers keep a fresh node from getting stuck with zero peers while
+# its initial graph sync is still incomplete.
+addpeer=02f1a8c87607f415c8f22c00593002775941dea48869ce23096af27b0cfdcc0b69@193.118.169.108:9735
+addpeer=03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f@3.33.236.230:9735
+addpeer=0242a4ae0c5bef18048fbecf995094b74bfb0f7391418d71ed394784373f41e4f3@3.124.63.44:9735
+
+[gossip]
+gossip.pinned-syncers=02f1a8c87607f415c8f22c00593002775941dea48869ce23096af27b0cfdcc0b69
+gossip.pinned-syncers=03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f
+gossip.pinned-syncers=0242a4ae0c5bef18048fbecf995094b74bfb0f7391418d71ed394784373f41e4f3
+
 [bitcoind]
 bitcoind.rpchost=bitcoin:8332
 bitcoind.rpcuser={{BITCOIN_RPC_USER}}
